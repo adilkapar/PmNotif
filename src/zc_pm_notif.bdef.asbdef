@@ -1,0 +1,35 @@
+projection;
+strict ( 2 );
+use draft; // <-- Project the Draft Mode to the UI
+
+define behavior for ZC_PM_NOTIF alias Notification
+implementation in class zcl_imp_bm_notif unique
+{
+  //  use create;
+  use update;
+  use delete;
+
+  // Project the standard Draft Actions
+  use action Edit;
+  use action Activate;
+  use action Discard;
+  use action Resume;
+  use action Prepare;
+
+  // Retained your existing popup action
+  use action createWithPopup;
+
+  // Project the association to UI layer
+  use association _Partner { create; with draft; }
+
+  use action createOrder;
+}
+
+// Project the Child Entity Behavior
+define behavior for ZC_PM_NotifPartner alias Partner
+{
+  use update;
+  use delete;
+
+  use association _Notif { with draft; }
+}

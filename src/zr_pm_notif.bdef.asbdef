@@ -1,0 +1,51 @@
+unmanaged implementation in class zbp_r_pm_notif unique;
+strict ( 2 );
+with draft; // <-- Enables Draft Mode
+
+define behavior for ZR_PM_NOTIF alias Notification
+draft table zpm_notif_d // <-- Auto-generate this table later
+lock master
+total etag CreationTime // <-- Required by strict(2) to manage draft states
+authorization master ( instance )
+{
+  //  create;
+  //  update;
+  update ( features : instance );
+  delete ( features : instance );
+
+  // Standard Draft Actions required by the framework
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft action Resume;
+  draft determine action Prepare;
+
+  field ( readonly ) Plant, MaintenanceOrder, EquipmentDesc, WorkcenterText, BasicCodeText, DetailCodeText;
+
+  // Expose the child to allow Fiori to add lines (+)
+  association _Partner { create ( features : instance ); with draft; }
+
+  // Retained your existing popup action
+  //static action createWithPopup parameter ZS_PM_BM_NOTIF_PARAM result [1] $self;
+
+  static action createWithPopup parameter ZS_PM_BM_NOTIF_PARAM;
+
+  action ( features : instance ) createOrder;
+
+}
+
+// Child Entity Behavior Definition
+define behavior for ZR_PM_NotifPartner alias Partner
+draft table zpm_notifp_d // <-- Auto-generate this table later
+lock dependent by _Notif
+authorization dependent by _Notif
+{
+  update;
+  delete;
+
+  // Prevent users from changing the parent key on the child row
+  field ( readonly ) NotificationNo, PartnerFunction;
+
+  // Link draft back to the parent
+  association _Notif { with draft; }
+}

@@ -1,0 +1,96 @@
+@Metadata.layer: #CUSTOMER
+@UI.headerInfo: {
+  typeName: 'BM Notification',
+  typeNamePlural: 'BM Notifications',
+  title: { value: 'NotificationNo', type: #STANDARD },
+//  description:{ value: 'Plant', type: #STANDARD },
+  description: { value: 'ShortText', type: #STANDARD },  // type: #STANDARD eklendi
+  typeImageUrl: 'sap-icon://bell'
+}
+annotate entity ZC_PM_NOTIF with
+{
+  @UI.facet: [
+    { id: 'GeneralInfo',     label: 'General Info',    type: #FIELDGROUP_REFERENCE,
+      targetQualifier: 'GeneralInfo',    position: 10 },
+    { id: 'StoppageReason',  label: 'Stoppage Reason', type: #FIELDGROUP_REFERENCE,
+      targetQualifier: 'StoppageReason', position: 20 },
+    { id: 'Assignment',        label: 'Assignment',    type: #LINEITEM_REFERENCE,
+      targetElement: '_Partner', position: 40 }
+  ]
+  @UI.lineItem: [
+    { position: 10 },
+    { type: #FOR_ACTION, dataAction: 'createWithPopup', label: 'Create Notification' },
+    // 2. The Instance-Bound Action (Acts on the CURRENT Notification you are viewing)
+    { type: #FOR_ACTION, dataAction: 'createOrder', label: 'Create BM Order', position: 20, invocationGrouping: #CHANGE_SET }
+  ]
+  @UI.identification: [
+    { position: 10 }]
+
+  @UI.selectionField: [{ position: 30 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 10, label: 'Notification No' }]
+  NotificationNo;
+
+  @UI.selectionField: [{ position: 20 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 10, label: 'Plant' }]
+  Plant;
+
+  @UI.lineItem: [{ position: 40 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 20, label: 'Notification Text' }]
+  ShortText;
+
+  @UI.lineItem: [{ position: 50 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 30, label: 'BM Order' }]
+  @UI.selectionField: [{ position: 40 }]
+  MaintenanceOrder;
+
+  @UI.lineItem: [{ position: 60 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 30, label: 'Equipment' }]
+  @UI.selectionField: [{ position: 50 }]
+  EquipmentNo;
+  
+  @UI.selectionField: [{ position: 20 }]
+  CreationDate;
+
+  @UI.lineItem: [{ position: 70 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 40, label: 'Equipment Desc.' }]
+  EquipmentDesc;
+
+  @UI.lineItem: [{ position: 80 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 50, label: 'Workcenter' }]
+  WorkCenter;
+
+  @UI.lineItem: [{ position: 90 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 60, label: 'Workcenter Text' }]
+  WorkCenterText;
+  
+  @UI.lineItem: [{ position: 100 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralInfo', position: 70, label: 'Breakdown Ind.' }]
+  Breakdown;
+
+  @EndUserText.label: 'Basic Stoppage Text'
+  @UI.lineItem: [{ position: 110 }]
+  @UI.fieldGroup: [{ qualifier: 'StoppageReason', position: 50, label: 'Basic Stoppage Text' }]
+  BasicCodeText;
+
+  @EndUserText.label: 'Detail Stoppage Text'
+  @UI.lineItem: [{ position: 120 }]
+  @UI.fieldGroup: [{ qualifier: 'StoppageReason', position: 60, label: 'Detailed Stoppage Text' }]
+  DetailCodeText;
+
+  @UI.lineItem: [{ position: 130 }]
+  ReporterName;
+
+  @UI.lineItem: [{ position: 140, criticality: 'StatusCriticality',
+      criticalityRepresentation: #WITH_ICON }]
+  ProcessingPhaseDesc;
+
+  @UI.lineItem: [{ position: 150 }]
+  @UI.selectionField: [{ position: 10 }]
+  @Consumption.derivation: {
+    lookupEntity: 'ZI_User_Default_Plant',
+    resultElement: 'Plant'
+  }
+
+  @UI.hidden: true
+  statuscriticality;
+}
