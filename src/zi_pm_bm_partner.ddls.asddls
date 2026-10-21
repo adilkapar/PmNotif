@@ -1,3 +1,22 @@
+//@AccessControl.authorizationCheck: #NOT_REQUIRED -- Changed to NOT_REQUIRED to prevent DCL dump if no roles exist
+//@EndUserText.label: 'BM - User Responsible (VU) Value Help'
+//@Search.searchable: true
+//-- REMOVED: @ObjectModel.resultSet.sizeCategory: #XS (To force a popup window instead of a dropdown)
+//
+//define view entity ZI_PM_BM_Partner
+//  as select from I_User
+//{
+//      @UI.lineItem: [{ position: 10 }]
+//      @Search.defaultSearchElement: true
+//      @ObjectModel.text.element: ['FullName']
+//  key UserID          as Partner,
+//
+//      @UI.lineItem: [{ position: 20 }]
+//      @Search.defaultSearchElement: true
+//      UserDescription as FullName
+//}
+//where
+//  UserID is not initial
 @AccessControl.authorizationCheck: #NOT_REQUIRED -- Changed to NOT_REQUIRED to prevent DCL dump if no roles exist
 @EndUserText.label: 'BM - User Responsible (VU) Value Help'
 @Search.searchable: true
@@ -20,4 +39,4 @@ define view entity ZI_PM_BM_Partner
 }
 where
       I_User.UserID    is not initial
-  and adcp.department  = 'MAINTENANCE TECHNICIAN'
+  and adcp.department  = 'TECHNICIAN'
