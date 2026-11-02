@@ -627,32 +627,30 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Find the highest counter in IHPA and draft table, start one above it.
-        " Also check the already-mapped entries in THIS call to handle same-batch requests.
-        DATA lv_max TYPE i.
-        DATA lv_val TYPE i.
+        DATA lv_max_i TYPE ihpa-counter.
+        DATA lv_max_d TYPE zpm_notifp_d-partnercounter.
+        DATA lv_max   TYPE i.
 
         SELECT SINGLE MAX( counter ) FROM ihpa
           WHERE objnr = @lv_objnr
-          INTO @lv_val.
-        IF lv_val > lv_max. lv_max = lv_val. ENDIF.
+          INTO @lv_max_i.
 
         SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
           WHERE notificationno = @ls_parent-NotificationNo
-          INTO @lv_val.
-        IF lv_val > lv_max. lv_max = lv_val. ENDIF.
+          INTO @lv_max_d.
 
-        " Also check what we already put in mapped-partner this call (same-batch safety)
-        LOOP AT mapped-partner INTO DATA(ls_already) WHERE NotificationNo = ls_parent-NotificationNo.
-          lv_val = ls_already-PartnerCounter.
-          IF lv_val > lv_max. lv_max = lv_val. ENDIF.
+        lv_max = COND i( WHEN lv_max_i > lv_max_d THEN lv_max_i ELSE lv_max_d ).
+
+        " Also track what we already assigned in this same call (same-batch safety)
+        LOOP AT mapped-partner INTO DATA(ls_already)
+          WHERE NotificationNo = ls_parent-NotificationNo.
+          DATA lv_m TYPE i.
+          lv_m = ls_already-PartnerCounter.
+          IF lv_m > lv_max. lv_max = lv_m. ENDIF.
         ENDLOOP.
 
-        DATA lv_next TYPE i.
-        lv_next = lv_max + 1.
-
-        DATA lv_ctr TYPE i_count.
-        lv_ctr = lv_next.
+        DATA lv_ctr TYPE zpm_notifp_d-partnercounter.
+        lv_ctr = lv_max + 1.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
