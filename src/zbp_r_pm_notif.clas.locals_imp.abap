@@ -180,7 +180,6 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
     DATA(lv_is_supervisor) = abap_false.
 
-    " 1. Check Authorization
     AUTHORITY-CHECK OBJECT 'ZPM_NOTIF'
       ID 'ZPM_ROLE' FIELD 'SUP'
       ID 'ACTVT'    DUMMY.
@@ -189,32 +188,18 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       lv_is_supervisor = abap_true.
     ENDIF.
 
-    " 2. Read notification data (order exists + partner exists)
     READ ENTITIES OF zr_pm_notif IN LOCAL MODE
       ENTITY Notification
-      FIELDS ( MaintenanceOrder NotificationNo )
+      FIELDS ( MaintenanceOrder )
       WITH CORRESPONDING #( keys )
       RESULT DATA(lt_notif_data).
 
     LOOP AT keys INTO DATA(ls_key).
-      DATA(lv_order_exists)   = abap_false.
-      DATA(lv_partner_exists) = abap_false.
+      DATA(lv_order_exists) = abap_false.
 
       READ TABLE lt_notif_data INTO DATA(ls_notif) WITH KEY %tky = ls_key-%tky.
-      IF sy-subrc = 0.
-        IF ls_notif-MaintenanceOrder IS NOT INITIAL.
-          lv_order_exists = abap_true.
-        ENDIF.
-
-        " Check if a partner is already saved in ihpa for this notification
-        IF ls_notif-NotificationNo IS NOT INITIAL.
-          DATA(lv_objnr) = |QM{ ls_notif-NotificationNo }|.
-          SELECT SINGLE @abap_true FROM ihpa
-            WHERE objnr    = @lv_objnr
-              AND parvw    = 'VU'
-              AND kzloesch = @space
-            INTO @lv_partner_exists.
-        ENDIF.
+      IF sy-subrc = 0 AND ls_notif-MaintenanceOrder IS NOT INITIAL.
+        lv_order_exists = abap_true.
       ENDIF.
 
       APPEND VALUE #(
@@ -228,12 +213,10 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
                               THEN if_abap_behv=>fc-o-disabled
                               ELSE if_abap_behv=>fc-o-enabled )
 
-        " Disable Create (+) once a partner is already saved, or if not a supervisor
-        %assoc-_Partner     = COND #( WHEN lv_is_supervisor = abap_false
-                              THEN if_abap_behv=>fc-o-disabled
-                              WHEN lv_partner_exists = abap_true
-                              THEN if_abap_behv=>fc-o-disabled
-                              ELSE if_abap_behv=>fc-o-enabled )
+        %assoc-_Partner     = COND #( WHEN lv_is_supervisor = abap_true
+                                       OR  lv_order_exists  = abap_true
+                              THEN if_abap_behv=>fc-o-enabled
+                              ELSE if_abap_behv=>fc-o-disabled )
 
         %action-createOrder = COND #( WHEN lv_is_supervisor = abap_false OR lv_order_exists = abap_true
                               THEN if_abap_behv=>fc-o-disabled
@@ -634,21 +617,38 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
-      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
+      DATA(lv_notif_no) = ls_parent-NotificationNo.
+      DATA(lv_objnr)    = |QM{ lv_notif_no }|.
 
-        " Assign counter 1 — only one partner is allowed per notification.
-        " The UI Create button is disabled once a partner exists (see get_instance_features).
+      " Max counter already saved in ihpa (active partners)
+      DATA(lv_max_ihpa) = CONV ihpa-counter( 0 ).
+      SELECT SINGLE MAX( counter ) FROM ihpa
+        WHERE objnr = @lv_objnr AND parvw = 'VU'
+        INTO @lv_max_ihpa.
+
+      " Max counter already in draft table (partners added in this or a prior draft)
+      DATA(lv_max_draft) = CONV zpm_notifp_d-partnercounter( 0 ).
+      SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+        WHERE notificationno = @lv_notif_no
+        INTO @lv_max_draft.
+
+      DATA(lv_next) = CONV zpm_notifp_d-partnercounter(
+        COND #( WHEN lv_max_ihpa > lv_max_draft THEN lv_max_ihpa ELSE lv_max_draft ) + 1 ).
+
+      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
         APPEND VALUE #(
-            %key-NotificationNo = ls_parent-NotificationNo
-            %key-PartnerCounter = 1
+            %key-NotificationNo = lv_notif_no
+            %key-PartnerCounter = lv_next
         ) TO mapped-partner.
 
         APPEND VALUE #(
-            notif_no = ls_parent-NotificationNo
+            notif_no = lv_notif_no
             parvw    = 'VU'
             partner  = ls_new_partner-Partner
             updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
+
+        lv_next += 1.
       ENDLOOP.
     ENDLOOP.
   ENDMETHOD.
