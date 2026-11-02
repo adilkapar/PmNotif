@@ -632,7 +632,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         lv_cid = ls_new_partner-%cid.
         lv_len = strlen( lv_cid ).
         IF lv_len >= 32.
-          lv_uuid = lv_cid+( lv_len - 32 )(32).
+          lv_uuid = substring( val = lv_cid off = lv_len - 32 len = 32 ).
         ELSE.
           lv_uuid = lv_cid.
         ENDIF.
