@@ -623,19 +623,26 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
-      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Take the last 32 chars of %cid — the unique GUID is always at the tail.
+      " Find the current highest DraftSeqNo suffix for this notification in the draft table.
+      " DraftSeqNo for draft-only rows is stored as a plain incrementing number right-padded to 32.
+      DATA lv_max_seq TYPE i.
+      DATA lv_max_c   TYPE sysuuid_c32.
+      SELECT MAX( draftseqno )
+        FROM zpm_notifp_d
+        WHERE notificationno = @ls_parent-notificationno
+        INTO @lv_max_c.
+      " Convert the max value to integer — it may be numeric string or zero if no rows yet.
+      TRY.
+          lv_max_seq = lv_max_c.
+        CATCH cx_sy_conversion_no_number.
+          lv_max_seq = 0.
+      ENDTRY.
+
+      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
+        lv_max_seq = lv_max_seq + 1.
         DATA lv_uuid TYPE sysuuid_c32.
-        DATA lv_cid  TYPE string.
-        DATA lv_len  TYPE i.
-        lv_cid = ls_new_partner-%cid.
-        lv_len = strlen( lv_cid ).
-        IF lv_len >= 32.
-          lv_uuid = substring( val = lv_cid off = lv_len - 32 len = 32 ).
-        ELSE.
-          lv_uuid = lv_cid.
-        ENDIF.
+        lv_uuid = lv_max_seq.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
