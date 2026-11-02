@@ -624,26 +624,17 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
-      " Find the current highest DraftSeqNo suffix for this notification in the draft table.
-      " DraftSeqNo for draft-only rows is stored as a plain incrementing number right-padded to 32.
-      DATA lv_max_seq TYPE i.
-      DATA lv_max_c   TYPE sysuuid_c32.
-      SELECT MAX( draftseqno )
+      DATA lv_count TYPE i.
+      SELECT COUNT(*)
         FROM zpm_notifp_d
         WHERE notificationno = @ls_parent-notificationno
-        INTO @lv_max_c.
-      " Convert the max value to integer — it may be numeric string or zero if no rows yet.
-      TRY.
-          lv_max_seq = lv_max_c.
-        CATCH cx_sy_conversion_no_number.
-          lv_max_seq = 0.
-      ENDTRY.
+        INTO @lv_count.
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
-        lv_max_seq = lv_max_seq + 1.
-        DATA lv_uuid TYPE sysuuid_c32.
+        lv_count = lv_count + 1.
+        DATA lv_uuid    TYPE sysuuid_c32.
         DATA lv_seq_str TYPE string.
-        lv_seq_str = lv_max_seq.
+        lv_seq_str = lv_count.
         CONDENSE lv_seq_str NO-GAPS.
         lv_uuid = lv_seq_str.
 
