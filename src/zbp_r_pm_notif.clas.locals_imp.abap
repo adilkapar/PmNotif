@@ -624,19 +624,19 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
-      " Read the max PartnerCounter already in the draft table as a numeric string.
-      " We start at 9000 to avoid colliding with real ihpa counters (0001, 0002, ...).
+      " Start at 900000 to avoid colliding with real ihpa counters (000001, 000002, ...)
+      " ihpa.counter is NUMC 6 — real values are small sequential numbers
       SELECT MAX( PartnerCounter ) FROM zpm_notifp_d
         WHERE NotificationNo = @ls_parent-NotificationNo
-        INTO @DATA(lv_draft_max_char).
+        INTO @DATA(lv_draft_max).
 
-      DATA(lv_next_i) = COND i(
-        WHEN lv_draft_max_char >= '9000' THEN CONV i( lv_draft_max_char )
-        ELSE 9000 ).
+      DATA(lv_next) = COND i(
+        WHEN lv_draft_max >= 900000 THEN lv_draft_max
+        ELSE 900000 ).
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        lv_next_i += 1.
+        lv_next += 1.
 
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
@@ -645,11 +645,9 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
             updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        DATA(lv_ctr) = CONV char4( lv_next_i ).
-
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
-                        PartnerCounter = lv_ctr )
+                        PartnerCounter = lv_next )
                INTO TABLE mapped-partner.
 
       ENDLOOP.
