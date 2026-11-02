@@ -106,6 +106,9 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS delete_partner FOR MODIFY
       IMPORTING keys FOR DELETE Partner.
 
+    METHODS adjust_numbers FOR NUMBERING
+      IMPORTING entities FOR CREATE Notification\_Partner.
+
     METHODS createOrder FOR MODIFY
       IMPORTING keys FOR ACTION Notification~createOrder.
 
@@ -617,38 +620,13 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
-      DATA(lv_notif_no) = ls_parent-NotificationNo.
-      DATA(lv_objnr)    = |QM{ lv_notif_no }|.
-
-      " Max counter already saved in ihpa (active partners)
-      DATA(lv_max_ihpa) = CONV ihpa-counter( 0 ).
-      SELECT SINGLE MAX( counter ) FROM ihpa
-        WHERE objnr = @lv_objnr AND parvw = 'VU'
-        INTO @lv_max_ihpa.
-
-      " Max counter already in draft table (partners added in this or a prior draft)
-      DATA(lv_max_draft) = CONV zpm_notifp_d-partnercounter( 0 ).
-      SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
-        WHERE notificationno = @lv_notif_no
-        INTO @lv_max_draft.
-
-      DATA(lv_next) = CONV zpm_notifp_d-partnercounter(
-        COND #( WHEN lv_max_ihpa > lv_max_draft THEN lv_max_ihpa ELSE lv_max_draft ) + 1 ).
-
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
         APPEND VALUE #(
-            %key-NotificationNo = lv_notif_no
-            %key-PartnerCounter = lv_next
-        ) TO mapped-partner.
-
-        APPEND VALUE #(
-            notif_no = lv_notif_no
+            notif_no = ls_parent-NotificationNo
             parvw    = 'VU'
             partner  = ls_new_partner-Partner
             updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
-
-        lv_next += 1.
       ENDLOOP.
     ENDLOOP.
   ENDMETHOD.
@@ -667,6 +645,36 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
           partner  = ls_partner-PartnerCounter
           updkz    = 'D'
       ) TO lhc_zr_pm_notif=>gt_assign_buffer.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD adjust_numbers.
+    LOOP AT entities ASSIGNING FIELD-SYMBOL(<ls_entity>).
+      DATA(lv_notif_no) = CONV qmnum( <ls_entity>-%key-NotificationNo ).
+      DATA(lv_objnr)    = |QM{ lv_notif_no }|.
+
+      " Highest counter committed to ihpa (real saved partners)
+      DATA(lv_max_ihpa) = CONV ihpa-counter( 0 ).
+      SELECT SINGLE MAX( counter ) FROM ihpa
+        WHERE objnr = @lv_objnr AND parvw = 'VU'
+        INTO @lv_max_ihpa.
+
+      " Highest counter in the draft table — exclude blank/zero rows (stale orphans)
+      DATA(lv_max_draft) = CONV zpm_notifp_d-partnercounter( 0 ).
+      SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+        WHERE notificationno = @lv_notif_no
+          AND partnercounter > 0
+        INTO @lv_max_draft.
+
+      DATA(lv_next) = CONV zpm_notifp_d-partnercounter(
+        COND #( WHEN lv_max_ihpa > lv_max_draft THEN lv_max_ihpa ELSE lv_max_draft ) + 1 ).
+
+      APPEND VALUE #(
+        %tky                = <ls_entity>-%tky
+        %key-NotificationNo = lv_notif_no
+        %key-PartnerCounter = lv_next
+      ) TO mapped-partner.
+
     ENDLOOP.
   ENDMETHOD.
 
