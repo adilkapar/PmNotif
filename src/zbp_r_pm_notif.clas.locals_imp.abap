@@ -622,38 +622,32 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
 
   METHOD cba_Partner.
-    " Use current timestamp as base for a unique draft counter.
-    " ihpa.counter is NUMC 6. Real SAP-assigned values are tiny (000001, 000002...).
-    " We use 9XYZAB pattern (leading 9 ensures no collision with real counters).
-    DATA(lv_time)  = CONV i( sy-uzeit ).   " HHMMSS as integer, max 235959
-    DATA(lv_base)  = 900000 + ( lv_time MOD 99999 ).  " Range 900000–999999
-
     LOOP AT entities_cba INTO DATA(ls_parent).
+      DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
 
-      DATA(lv_next) = lv_base.
+      " Find the highest counter already used — in IHPA (saved) and in the draft table (pending).
+      " Start the new counter one above that, guaranteeing no collisions.
+      DATA lv_max_ihpa  TYPE i.
+      DATA lv_max_draft TYPE i.
+
+      SELECT SINGLE MAX( counter ) FROM ihpa
+        WHERE objnr = @lv_objnr
+        INTO @lv_max_ihpa.
+
+      SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+        WHERE notificationno = @ls_parent-NotificationNo
+        INTO @lv_max_draft.
+
+      DATA(lv_next) = COND i(
+        WHEN lv_max_ihpa > lv_max_draft THEN lv_max_ihpa + 1
+        ELSE lv_max_draft + 1 ).
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        lv_next += 1.
-
-        " Verify this counter does not already exist in ihpa or draft table
-        DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
-        DO 9999 TIMES.
-          SELECT SINGLE @abap_true FROM ihpa
-            WHERE objnr = @lv_objnr AND counter = @lv_next
-            INTO @DATA(lv_exists_ihpa).
-          IF lv_exists_ihpa = abap_true.
-            lv_next += 1. CONTINUE.
-          ENDIF.
-          SELECT SINGLE @abap_true FROM zpm_notifp_d
-            WHERE NotificationNo = @ls_parent-NotificationNo
-              AND PartnerCounter  = @lv_next
-            INTO @DATA(lv_exists_draft).
-          IF lv_exists_draft = abap_true.
-            lv_next += 1. CONTINUE.
-          ENDIF.
-          EXIT.
-        ENDDO.
+        INSERT VALUE #( %cid           = ls_new_partner-%cid
+                        NotificationNo = ls_parent-NotificationNo
+                        PartnerCounter = lv_next )
+               INTO TABLE mapped-partner.
 
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
@@ -662,10 +656,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
             updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        INSERT VALUE #( %cid           = ls_new_partner-%cid
-                        NotificationNo = ls_parent-NotificationNo
-                        PartnerCounter = lv_next )
-               INTO TABLE mapped-partner.
+        lv_next += 1.
 
       ENDLOOP.
     ENDLOOP.
