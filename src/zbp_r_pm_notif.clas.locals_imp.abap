@@ -643,32 +643,44 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
   METHOD adjust_numbers.
     LOOP AT entities INTO DATA(ls_entity).
-      DATA lv_max_ihpa  TYPE ihpa-counter.
-      DATA lv_max_draft TYPE zpm_notifp_d-partnercounter.
-      DATA lv_next      TYPE zpm_notifp_d-partnercounter.
-      DATA lv_objnr     TYPE ihpa-objnr.
 
-      lv_objnr = |QM{ ls_entity-NotificationNo }|.
+      DATA(lv_max_ihpa)  = CONV ihpa-counter( 0 ).
+      DATA(lv_max_draft) = CONV zpm_notifp_d-partnercounter( 0 ).
+      DATA(lv_objnr)     = |QM{ ls_entity-NotificationNo }|.
 
-      SELECT SINGLE MAX( counter )
-        FROM ihpa
-        WHERE objnr = @lv_objnr AND parvw = 'VU'
-        INTO @lv_max_ihpa.
+      IF ls_entity-NotificationNo IS NOT INITIAL.
+        SELECT SINGLE MAX( counter )
+          FROM ihpa
+          WHERE objnr = @lv_objnr AND parvw = 'VU'
+          INTO @lv_max_ihpa.
 
-      SELECT SINGLE MAX( partnercounter )
-        FROM zpm_notifp_d
-        WHERE notificationno = @ls_entity-NotificationNo
-        INTO @lv_max_draft.
-
-      IF lv_max_ihpa > lv_max_draft.
-        lv_next = lv_max_ihpa + 1.
-      ELSE.
-        lv_next = lv_max_draft + 1.
+        SELECT SINGLE MAX( partnercounter )
+          FROM zpm_notifp_d
+          WHERE notificationno = @ls_entity-NotificationNo
+          INTO @lv_max_draft.
       ENDIF.
 
-      APPEND VALUE #( %key-NotificationNo = ls_entity-NotificationNo
-                      %key-PartnerCounter = lv_next )
-             TO mapped-partner.
+      " Also account for counters already assigned in this call (multiple adds at once)
+      DATA(lv_max_assigned) = CONV zpm_notifp_d-partnercounter( 0 ).
+      LOOP AT mapped-partner INTO DATA(ls_mapped)
+        WHERE %key-NotificationNo = ls_entity-NotificationNo.
+        IF ls_mapped-%key-PartnerCounter > lv_max_assigned.
+          lv_max_assigned = ls_mapped-%key-PartnerCounter.
+        ENDIF.
+      ENDLOOP.
+
+      DATA(lv_base) = COND zpm_notifp_d-partnercounter(
+        WHEN lv_max_ihpa  > lv_max_draft    THEN lv_max_ihpa
+        WHEN lv_max_draft > lv_max_assigned THEN lv_max_draft
+        ELSE lv_max_assigned ).
+
+      APPEND VALUE #(
+        %cid                 = ls_entity-%cid
+        %is_draft            = ls_entity-%is_draft
+        %key-NotificationNo  = ls_entity-NotificationNo
+        %key-PartnerCounter  = lv_base + 1
+      ) TO mapped-partner.
+
     ENDLOOP.
   ENDMETHOD.
 
@@ -725,10 +737,10 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       ENDIF.
 
       IF NOT ls_notif-NotificationNo IS INITIAL.
-        SELECT NotificationNo, Partner
-         FROM ZR_PM_NotifPartner
-         WHERE NotificationNo = @ls_notif-NotificationNo
-         INTO TABLE @DATA(lt_notif_partner).
+        READ ENTITIES OF zr_pm_notif IN LOCAL MODE
+          ENTITY Notification BY \_Partner
+          ALL FIELDS WITH VALUE #( ( %tky = ls_key-%tky ) )
+          RESULT DATA(lt_notif_partner).
         IF lt_notif_partner[] IS INITIAL.
           APPEND VALUE #( %tky = ls_key-%tky ) TO failed-notification.
           APPEND VALUE #( %tky = ls_key-%tky
