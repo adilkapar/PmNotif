@@ -639,7 +639,6 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         " Assign counter 1 — only one partner is allowed per notification.
         " The UI Create button is disabled once a partner exists (see get_instance_features).
         APPEND VALUE #(
-            %tky                = ls_new_partner-%tky
             %key-NotificationNo = ls_parent-NotificationNo
             %key-PartnerCounter = 1
         ) TO mapped-partner.
