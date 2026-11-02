@@ -623,20 +623,45 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
-      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Return key with PartnerCounter = 0 for new draft rows.
-        " The framework uses DRAFTADMINISTRATIVEUUID internally to distinguish rows.
+      " Get the current max counter for this notification across both IHPA and draft table.
+      " This ensures new draft rows never collide with existing active or draft rows.
+      DATA lv_max_ihpa  TYPE ihpa-counter.
+      DATA lv_max_draft TYPE zpm_notifp_d-partnercounter.
+      DATA lv_next      TYPE zpm_notifp_d-partnercounter.
+      DATA lv_objnr     TYPE ihpa-objnr.
+      lv_objnr = |QM{ ls_parent-NotificationNo }|.
+
+      SELECT SINGLE MAX( counter )
+        FROM ihpa
+        WHERE objnr = @lv_objnr
+          AND parvw = 'VU'
+        INTO @lv_max_ihpa.
+
+      SELECT SINGLE MAX( partnercounter )
+        FROM zpm_notifp_d
+        WHERE notificationno = @ls_parent-NotificationNo
+        INTO @lv_max_draft.
+
+      IF lv_max_ihpa > lv_max_draft.
+        lv_next = lv_max_ihpa.
+      ELSE.
+        lv_next = lv_max_draft.
+      ENDIF.
+
+      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
+        lv_next = lv_next + 1.
+
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
-                        PartnerCounter = '000000' )
+                        PartnerCounter = lv_next )
                INTO TABLE mapped-partner.
 
         APPEND VALUE #(
-            notif_no  = ls_parent-NotificationNo
-            parvw     = 'VU'
-            partner   = ls_new_partner-Partner
-            updkz     = 'I'
+            notif_no = ls_parent-NotificationNo
+            parvw    = 'VU'
+            partner  = ls_new_partner-Partner
+            updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
       ENDLOOP.
