@@ -107,7 +107,7 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR DELETE Partner.
 
     METHODS adjust_numbers FOR NUMBERING
-      IMPORTING entities FOR CREATE Notification\_Partner.
+      IMPORTING entities FOR CREATE Partner.
 
     METHODS createOrder FOR MODIFY
       IMPORTING keys FOR ACTION Notification~createOrder.
