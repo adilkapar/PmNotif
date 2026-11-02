@@ -18,10 +18,11 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
     CLASS-DATA gt_notif_buffer TYPE TABLE OF ty_notif_buffer.
 
     TYPES: BEGIN OF ty_assign_buffer,
-             notif_no TYPE qmnum,
-             parvw    TYPE parvw,
-             partner  TYPE bu_partner,
-             updkz    TYPE char1, " 'I' for Insert, 'D' for Delete
+             notif_no  TYPE qmnum,
+             parvw     TYPE parvw,
+             partner   TYPE bu_partner,
+             updkz     TYPE char1,       " 'I' for Insert, 'D' for Delete
+             draft_seq TYPE sysuuid_c32, " DraftSeqNo — used to read Partner from draft table at save time
            END OF ty_assign_buffer.
 
     CLASS-DATA gt_assign_buffer TYPE TABLE OF ty_assign_buffer.
@@ -624,6 +625,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
+      " Count existing draft rows for this notification to generate a unique sequence key.
       DATA lv_count TYPE i.
       SELECT COUNT(*)
         FROM zpm_notifp_d
@@ -632,24 +634,26 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
         lv_count = lv_count + 1.
-        DATA lv_uuid    TYPE sysuuid_c32.
-        DATA lv_seq_str TYPE string.
-        lv_seq_str = lv_count.
-        CONDENSE lv_seq_str NO-GAPS.
-        lv_uuid = lv_seq_str.
+        " Build a left-justified non-empty key: 'D' followed by the counter number.
+        " E.g. first row = 'D1', second = 'D2'. Always unique per notification per session.
+        DATA lv_uuid   TYPE sysuuid_c32.
+        DATA lv_cnt_s  TYPE string.
+        lv_cnt_s = lv_count.
+        CONDENSE lv_cnt_s NO-GAPS.
+        CONCATENATE 'D' lv_cnt_s INTO lv_cnt_s.
+        lv_uuid = lv_cnt_s.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
                         DraftSeqNo     = lv_uuid )
                INTO TABLE mapped-partner.
-
+        " Buffer the insert with draft_seq so save can read the filled-in Partner from draft table.
         APPEND VALUE #(
-            notif_no = ls_parent-NotificationNo
-            parvw    = 'VU'
-            partner  = ls_new_partner-Partner
-            updkz    = 'I'
+            notif_no  = ls_parent-NotificationNo
+            parvw     = 'VU'
+            updkz     = 'I'
+            draft_seq = lv_uuid
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
-
       ENDLOOP.
     ENDLOOP.
   ENDMETHOD.
@@ -895,12 +899,20 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
       " 1. Loop through the group and route actions to the correct tables
       LOOP AT GROUP lv_notif_no INTO DATA(ls_partner_action).
 
-        IF ls_partner_action-updkz = 'I'. " Handle Inserts
+        IF ls_partner_action-updkz = 'I'. " Handle Inserts — read actual partner from draft table
+
+          " Read the partner value filled in by the user from the draft table.
+          SELECT SINGLE partner
+            FROM zpm_notifp_d
+            WHERE notificationno = @ls_partner_action-notif_no
+              AND draftseqno     = @ls_partner_action-draft_seq
+            INTO @DATA(lv_partner_val).
+          CHECK sy-subrc = 0 AND lv_partner_val IS NOT INITIAL.
 
           " Route directly to ADD table
           CLEAR ls_partner_add.
           ls_partner_add-partn_role = 'VU'.
-          ls_partner_add-partner    = ls_partner_action-partner.
+          ls_partner_add-partner    = lv_partner_val.
           APPEND ls_partner_add TO lt_partner_add.
 
         ELSEIF ls_partner_action-updkz = 'D'. " Handle Deletes
