@@ -107,7 +107,7 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR DELETE Partner.
 
     METHODS adjust_numbers FOR NUMBERING
-      IMPORTING entities FOR CREATE Partner.
+      IMPORTING entities FOR CREATE Notification\_Partner.
 
     METHODS createOrder FOR MODIFY
       IMPORTING keys FOR ACTION Notification~createOrder.
@@ -675,7 +675,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         ELSE lv_max_assigned ).
 
       APPEND VALUE #(
-        %is_draft            = ls_entity-%is_draft
+        %is_draft            = if_abap_behv=>mk-on
         %key-NotificationNo  = ls_entity-NotificationNo
         %key-PartnerCounter  = lv_base + 1
       ) TO mapped-partner.
