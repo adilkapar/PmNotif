@@ -670,7 +670,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       lv_next = lv_next + 1.
 
       " Return the assigned key back to the framework.
-      APPEND VALUE #( %cid           = ls_entity-%cid
+      APPEND VALUE #( %pid            = ls_entity-%pid
                       %key-NotificationNo = ls_entity-NotificationNo
                       %key-PartnerCounter = lv_next )
              TO mapped-partner.
