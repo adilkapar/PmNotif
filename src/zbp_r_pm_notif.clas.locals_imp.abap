@@ -644,21 +644,17 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD adjust_numbers.
-    " Assign unique PartnerCounter to each new partner instance before the draft table is written.
-    " Called by the framework immediately after cba_Partner due to 'early numbering'.
     LOOP AT entities INTO DATA(ls_entity).
-
-      " Find max counter across both IHPA (active) and draft table (pending) for this notification.
       DATA lv_max_ihpa  TYPE ihpa-counter.
       DATA lv_max_draft TYPE zpm_notifp_d-partnercounter.
       DATA lv_next      TYPE zpm_notifp_d-partnercounter.
       DATA lv_objnr     TYPE ihpa-objnr.
+
       lv_objnr = |QM{ ls_entity-NotificationNo }|.
 
       SELECT SINGLE MAX( counter )
         FROM ihpa
-        WHERE objnr = @lv_objnr
-          AND parvw = 'VU'
+        WHERE objnr = @lv_objnr AND parvw = 'VU'
         INTO @lv_max_ihpa.
 
       SELECT SINGLE MAX( partnercounter )
@@ -666,14 +662,15 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         WHERE notificationno = @ls_entity-NotificationNo
         INTO @lv_max_draft.
 
-      lv_next = COND #( WHEN lv_max_ihpa > lv_max_draft THEN lv_max_ihpa ELSE lv_max_draft ).
-      lv_next = lv_next + 1.
+      IF lv_max_ihpa > lv_max_draft.
+        lv_next = lv_max_ihpa + 1.
+      ELSE.
+        lv_next = lv_max_draft + 1.
+      ENDIF.
 
-      " Return the assigned key back to the framework.
       APPEND VALUE #( %key-NotificationNo = ls_entity-NotificationNo
                       %key-PartnerCounter = lv_next )
              TO mapped-partner.
-
     ENDLOOP.
   ENDMETHOD.
 
