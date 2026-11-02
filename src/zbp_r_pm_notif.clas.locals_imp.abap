@@ -651,20 +651,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD adjust_numbers.
     LOOP AT entities ASSIGNING FIELD-SYMBOL(<ls_entity>).
       DATA(lv_notif_no) = CONV qmnum( <ls_entity>-%key-NotificationNo ).
-
-      " If the entity already carries a non-zero counter (active row being shadowed
-      " into draft by the Edit action), preserve it as-is.
-      IF <ls_entity>-%key-PartnerCounter > 0.
-        APPEND VALUE #(
-          %tky                = <ls_entity>-%tky
-          %key-NotificationNo = lv_notif_no
-          %key-PartnerCounter = <ls_entity>-%key-PartnerCounter
-        ) TO mapped-partner.
-        CONTINUE.
-      ENDIF.
-
-      " New row (counter = 0): compute next counter from ihpa and draft table.
-      DATA(lv_objnr) = |QM{ lv_notif_no }|.
+      DATA(lv_objnr)    = |QM{ lv_notif_no }|.
 
       DATA(lv_max_ihpa) = CONV ihpa-counter( 0 ).
       SELECT SINGLE MAX( counter ) FROM ihpa
