@@ -627,8 +627,8 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
       " Find the highest counter already used — in IHPA (saved) and in the draft table (pending).
       " Start the new counter one above that, guaranteeing no collisions.
-      DATA lv_max_ihpa  TYPE i.
-      DATA lv_max_draft TYPE i.
+      DATA lv_max_ihpa  TYPE i_count.
+      DATA lv_max_draft TYPE i_count.
 
       SELECT SINGLE MAX( counter ) FROM ihpa
         WHERE objnr = @lv_objnr
@@ -638,7 +638,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         WHERE notificationno = @ls_parent-NotificationNo
         INTO @lv_max_draft.
 
-      DATA(lv_next) = COND i(
+      DATA(lv_next) = COND i_count(
         WHEN lv_max_ihpa > lv_max_draft THEN lv_max_ihpa + 1
         ELSE lv_max_draft + 1 ).
 
