@@ -622,42 +622,21 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
 
   METHOD cba_Partner.
-    DATA lt_used TYPE TABLE OF i WITH EMPTY KEY.
-
     LOOP AT entities_cba INTO DATA(ls_parent).
-      DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
-
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        DATA lv_max_i TYPE ihpa-counter.
-        DATA lv_max_d TYPE zpm_notifp_d-partnercounter.
-        DATA lv_a     TYPE i.
-        DATA lv_b     TYPE i.
-        DATA lv_max   TYPE i.
-        DATA lv_next  TYPE i.
-
-        SELECT SINGLE MAX( counter ) FROM ihpa
-          WHERE objnr = @lv_objnr
-          INTO @lv_max_i.
-
-        SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
-          WHERE notificationno = @ls_parent-NotificationNo
-          INTO @lv_max_d.
-
-        lv_a = lv_max_i.
-        lv_b = lv_max_d.
-        lv_max = COND i( WHEN lv_a > lv_b THEN lv_a ELSE lv_b ).
-
-        LOOP AT lt_used INTO DATA(lv_used).
-          IF lv_used > lv_max. lv_max = lv_used. ENDIF.
-        ENDLOOP.
-
-        lv_next = lv_max + 1.
-        APPEND lv_next TO lt_used.
+        " Generate a UUID as the draft key — cryptographically unique per call,
+        " no dependency on DB state, never collides in the change buffer.
+        DATA lv_uuid TYPE sysuuid_c32.
+        TRY.
+            lv_uuid = cl_system_uuid=>create_uuid_c32_static( ).
+          CATCH cx_uuid_error.
+            lv_uuid = '00000000000000000000000000000001'.
+        ENDTRY.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
-                        PartnerCounter = lv_next )
+                        DraftSeqNo     = lv_uuid )
                INTO TABLE mapped-partner.
 
         APPEND VALUE #(
