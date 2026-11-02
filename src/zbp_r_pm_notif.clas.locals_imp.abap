@@ -622,6 +622,8 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
 
   METHOD cba_Partner.
+    DATA lt_used TYPE TABLE OF i WITH EMPTY KEY.
+
     LOOP AT entities_cba INTO DATA(ls_parent).
       DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
 
@@ -629,7 +631,10 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
         DATA lv_max_i TYPE ihpa-counter.
         DATA lv_max_d TYPE zpm_notifp_d-partnercounter.
+        DATA lv_a     TYPE i.
+        DATA lv_b     TYPE i.
         DATA lv_max   TYPE i.
+        DATA lv_next  TYPE i.
 
         SELECT SINGLE MAX( counter ) FROM ihpa
           WHERE objnr = @lv_objnr
@@ -639,22 +644,20 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
           WHERE notificationno = @ls_parent-NotificationNo
           INTO @lv_max_d.
 
-        lv_max = COND i( WHEN lv_max_i > lv_max_d THEN lv_max_i ELSE lv_max_d ).
+        lv_a = lv_max_i.
+        lv_b = lv_max_d.
+        lv_max = COND i( WHEN lv_a > lv_b THEN lv_a ELSE lv_b ).
 
-        " Also track what we already assigned in this same call (same-batch safety)
-        LOOP AT mapped-partner INTO DATA(ls_already)
-          WHERE NotificationNo = ls_parent-NotificationNo.
-          DATA lv_m TYPE i.
-          lv_m = ls_already-PartnerCounter.
-          IF lv_m > lv_max. lv_max = lv_m. ENDIF.
+        LOOP AT lt_used INTO DATA(lv_used).
+          IF lv_used > lv_max. lv_max = lv_used. ENDIF.
         ENDLOOP.
 
-        DATA lv_ctr TYPE zpm_notifp_d-partnercounter.
-        lv_ctr = lv_max + 1.
+        lv_next = lv_max + 1.
+        APPEND lv_next TO lt_used.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
-                        PartnerCounter = lv_ctr )
+                        PartnerCounter = lv_next )
                INTO TABLE mapped-partner.
 
         APPEND VALUE #(
