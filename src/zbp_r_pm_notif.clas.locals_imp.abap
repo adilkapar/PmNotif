@@ -106,9 +106,6 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS delete_partner FOR MODIFY
       IMPORTING keys FOR DELETE Partner.
 
-    METHODS adjust_numbers FOR NUMBERING
-      IMPORTING entities FOR CREATE Notification\_Partner.
-
     METHODS createOrder FOR MODIFY
       IMPORTING keys FOR ACTION Notification~createOrder.
 
@@ -634,48 +631,6 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
             updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
       ENDLOOP.
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD adjust_numbers.
-    LOOP AT entities ASSIGNING FIELD-SYMBOL(<ls_entity>).
-
-      DATA(lv_max_ihpa)  = CONV ihpa-counter( 0 ).
-      DATA(lv_max_draft) = CONV zpm_notifp_d-partnercounter( 0 ).
-      DATA(lv_notif_no)  = CONV qmnum( <ls_entity>-%key-NotificationNo ).
-      DATA(lv_objnr)     = |QM{ lv_notif_no }|.
-
-      IF lv_notif_no IS NOT INITIAL.
-        SELECT SINGLE MAX( counter )
-          FROM ihpa
-          WHERE objnr = @lv_objnr AND parvw = 'VU'
-          INTO @lv_max_ihpa.
-
-        SELECT SINGLE MAX( partnercounter )
-          FROM zpm_notifp_d
-          WHERE notificationno = @lv_notif_no
-          INTO @lv_max_draft.
-      ENDIF.
-
-      DATA(lv_max_assigned) = CONV zpm_notifp_d-partnercounter( 0 ).
-      LOOP AT mapped-partner INTO DATA(ls_mapped)
-        WHERE %key-NotificationNo = lv_notif_no.
-        IF ls_mapped-%key-PartnerCounter > lv_max_assigned.
-          lv_max_assigned = ls_mapped-%key-PartnerCounter.
-        ENDIF.
-      ENDLOOP.
-
-      DATA(lv_base) = COND zpm_notifp_d-partnercounter(
-        WHEN lv_max_ihpa  > lv_max_draft    THEN lv_max_ihpa
-        WHEN lv_max_draft > lv_max_assigned THEN lv_max_draft
-        ELSE lv_max_assigned ).
-
-      APPEND VALUE #(
-        %tky                 = <ls_entity>-%tky
-        %key-NotificationNo  = lv_notif_no
-        %key-PartnerCounter  = lv_base + 1
-      ) TO mapped-partner.
-
     ENDLOOP.
   ENDMETHOD.
 

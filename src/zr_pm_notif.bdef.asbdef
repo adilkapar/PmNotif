@@ -39,7 +39,6 @@ define behavior for ZR_PM_NotifPartner alias Partner
 draft table zpm_notifp_d
 lock dependent by _Notif
 authorization dependent by _Notif
-early numbering
 {
   update;
   delete;
