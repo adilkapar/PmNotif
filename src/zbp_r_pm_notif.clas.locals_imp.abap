@@ -638,11 +638,11 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD adjust_numbers.
-    LOOP AT entities INTO DATA(ls_entity).
+    LOOP AT entities ASSIGNING FIELD-SYMBOL(<ls_entity>).
 
       DATA(lv_max_ihpa)  = CONV ihpa-counter( 0 ).
       DATA(lv_max_draft) = CONV zpm_notifp_d-partnercounter( 0 ).
-      DATA(lv_notif_no)  = CONV qmnum( ls_entity-%key-NotificationNo ).
+      DATA(lv_notif_no)  = CONV qmnum( <ls_entity>-%key-NotificationNo ).
       DATA(lv_objnr)     = |QM{ lv_notif_no }|.
 
       IF lv_notif_no IS NOT INITIAL.
@@ -671,6 +671,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         ELSE lv_max_assigned ).
 
       APPEND VALUE #(
+        %cid                 = <ls_entity>-%cid
         %is_draft            = if_abap_behv=>mk-on
         %key-NotificationNo  = lv_notif_no
         %key-PartnerCounter  = lv_base + 1
