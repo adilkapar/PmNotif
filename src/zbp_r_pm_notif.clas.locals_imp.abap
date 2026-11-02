@@ -625,9 +625,8 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
             updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        INSERT VALUE #( %cid            = ls_new_partner-%cid
-                        NotificationNo  = ls_parent-NotificationNo
-                        PartnerFunction = ls_new_partner-PartnerFunction )
+        INSERT VALUE #( %cid           = ls_new_partner-%cid
+                        NotificationNo = ls_parent-NotificationNo )
                INTO TABLE mapped-partner.
       ENDLOOP.
     ENDLOOP.
