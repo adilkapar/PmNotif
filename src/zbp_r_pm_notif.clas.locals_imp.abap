@@ -624,27 +624,19 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
-      " Find the current highest counter in both the real DB and the draft table
-      " so each new row gets a key that is guaranteed unique
-      DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
-
-      SELECT SINGLE MAX( counter ) FROM ihpa
-        WHERE objnr = @lv_objnr
-          AND parvw = 'VU'
-        INTO @DATA(lv_max_ctr).
-
-      " Also check the draft table for any pending (not yet saved) rows
+      " Read the max PartnerCounter already in the draft table as a numeric string.
+      " We start at 9000 to avoid colliding with real ihpa counters (0001, 0002, ...).
       SELECT MAX( PartnerCounter ) FROM zpm_notifp_d
         WHERE NotificationNo = @ls_parent-NotificationNo
-        INTO @DATA(lv_max_draft_ctr).
+        INTO @DATA(lv_draft_max_char).
 
-      DATA(lv_next_ctr) = COND i(
-        WHEN lv_max_draft_ctr > lv_max_ctr THEN lv_max_draft_ctr
-        ELSE lv_max_ctr ).
+      DATA(lv_next_i) = COND i(
+        WHEN lv_draft_max_char >= '9000' THEN CONV i( lv_draft_max_char )
+        ELSE 9000 ).
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        lv_next_ctr += 1.
+        lv_next_i += 1.
 
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
@@ -656,7 +648,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         INSERT VALUE #( %cid            = ls_new_partner-%cid
                         NotificationNo  = ls_parent-NotificationNo
                         PartnerFunction = 'VU'
-                        PartnerCounter  = lv_next_ctr )
+                        PartnerCounter  = |{ lv_next_i ALPHA = IN WIDTH = 4 }| )
                INTO TABLE mapped-partner.
 
       ENDLOOP.
