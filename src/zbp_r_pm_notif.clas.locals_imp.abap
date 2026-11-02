@@ -636,11 +636,27 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
             updkz    = 'I' " I = Insert
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        " Map the temporary Content ID (%cid) to tell Fiori it was successful
+        " >>>>>>>>>> CHANGE START: assign PartnerCounter from MAX(ihpa)+MAX(draft)+1
+        DATA(lv_objnr_cba) = |QM{ ls_parent-NotificationNo }|.
+
+        SELECT SINGLE MAX( counter ) FROM ihpa
+          WHERE objnr = @lv_objnr_cba AND parvw = 'VU'
+          INTO @DATA(lv_max_ihpa_cba).
+
+        SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+          WHERE notificationno = @ls_parent-NotificationNo
+          INTO @DATA(lv_max_draft_cba).
+
+        DATA(lv_next_ctr) = COND #( WHEN lv_max_ihpa_cba > lv_max_draft_cba
+                                     THEN lv_max_ihpa_cba + 1
+                                     ELSE lv_max_draft_cba + 1 ).
+
         INSERT VALUE #( %cid            = ls_new_partner-%cid
                         NotificationNo  = ls_parent-NotificationNo
-                        PartnerFunction = ls_new_partner-PartnerFunction )
+                        PartnerFunction = 'VU'
+                        PartnerCounter  = lv_next_ctr )
                INTO TABLE mapped-partner.
+        " <<<<<<<<<< CHANGE END
 
       ENDLOOP.
     ENDLOOP.
