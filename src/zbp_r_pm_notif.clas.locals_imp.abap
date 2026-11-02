@@ -625,11 +625,17 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
     LOOP AT entities_cba INTO DATA(ls_parent).
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " %cid is unique per create operation — pad/truncate to 32 chars for SYSUUID_C32.
+        " Take the last 32 chars of %cid — the unique GUID is always at the tail.
         DATA lv_uuid TYPE sysuuid_c32.
         DATA lv_cid  TYPE string.
-        lv_cid  = ls_new_partner-%cid.
-        lv_uuid = lv_cid.
+        DATA lv_len  TYPE i.
+        lv_cid = ls_new_partner-%cid.
+        lv_len = strlen( lv_cid ).
+        IF lv_len >= 32.
+          lv_uuid = lv_cid+( lv_len - 32 )(32).
+        ELSE.
+          lv_uuid = lv_cid.
+        ENDIF.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
