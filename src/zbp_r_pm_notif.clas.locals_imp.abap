@@ -675,7 +675,6 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         ELSE lv_max_assigned ).
 
       APPEND VALUE #(
-        %cid                 = ls_entity-%cid
         %is_draft            = ls_entity-%is_draft
         %key-NotificationNo  = ls_entity-NotificationNo
         %key-PartnerCounter  = lv_base + 1
