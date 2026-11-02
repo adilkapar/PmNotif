@@ -189,44 +189,55 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       lv_is_supervisor = abap_true.
     ENDIF.
 
-    " 2. CLEAN CORE: Read the buffered data to check if an order exists
+    " 2. Read notification data (order exists + partner exists)
     READ ENTITIES OF zr_pm_notif IN LOCAL MODE
       ENTITY Notification
-      FIELDS ( MaintenanceOrder ) " <-- Adjust to your exact CDS field name
+      FIELDS ( MaintenanceOrder NotificationNo )
       WITH CORRESPONDING #( keys )
       RESULT DATA(lt_notif_data).
 
     LOOP AT keys INTO DATA(ls_key).
-      DATA(lv_order_exists) = abap_false.
+      DATA(lv_order_exists)   = abap_false.
+      DATA(lv_partner_exists) = abap_false.
 
-      " Look up the data we just read for this specific row
       READ TABLE lt_notif_data INTO DATA(ls_notif) WITH KEY %tky = ls_key-%tky.
-      IF sy-subrc = 0 AND ls_notif-MaintenanceOrder IS NOT INITIAL.
-        lv_order_exists = abap_true.
+      IF sy-subrc = 0.
+        IF ls_notif-MaintenanceOrder IS NOT INITIAL.
+          lv_order_exists = abap_true.
+        ENDIF.
+
+        " Check if a partner is already saved in ihpa for this notification
+        IF ls_notif-NotificationNo IS NOT INITIAL.
+          DATA(lv_objnr) = |QM{ ls_notif-NotificationNo }|.
+          SELECT SINGLE @abap_true FROM ihpa
+            WHERE objnr    = @lv_objnr
+              AND parvw    = 'VU'
+              AND kzloesch = @space
+            INTO @lv_partner_exists.
+        ENDIF.
       ENDIF.
 
       APPEND VALUE #(
         %tky                = ls_key-%tky
 
-        " NEW: Disable standard Edit/Draft creation if an Order already exists
-        %update             = COND #( WHEN lv_order_exists  = abap_true
-        THEN if_abap_behv=>fc-o-disabled
-        ELSE if_abap_behv=>fc-o-enabled )
+        %update             = COND #( WHEN lv_order_exists = abap_true
+                              THEN if_abap_behv=>fc-o-disabled
+                              ELSE if_abap_behv=>fc-o-enabled )
 
-        %delete             = COND #( WHEN lv_order_exists  = abap_true
-        THEN if_abap_behv=>fc-o-disabled
-        ELSE if_abap_behv=>fc-o-enabled )
+        %delete             = COND #( WHEN lv_order_exists = abap_true
+                              THEN if_abap_behv=>fc-o-disabled
+                              ELSE if_abap_behv=>fc-o-enabled )
 
-        " Partner Button Control
-        %assoc-_Partner     = COND #( WHEN lv_is_supervisor = abap_true
-                    OR                     lv_order_exists  = abap_true
-        THEN if_abap_behv=>fc-o-enabled
-        ELSE if_abap_behv=>fc-o-disabled )
+        " Disable Create (+) once a partner is already saved, or if not a supervisor
+        %assoc-_Partner     = COND #( WHEN lv_is_supervisor = abap_false
+                              THEN if_abap_behv=>fc-o-disabled
+                              WHEN lv_partner_exists = abap_true
+                              THEN if_abap_behv=>fc-o-disabled
+                              ELSE if_abap_behv=>fc-o-enabled )
 
-        " BM Order Button Control (Grey out if Operator OR if Order exists)
         %action-createOrder = COND #( WHEN lv_is_supervisor = abap_false OR lv_order_exists = abap_true
-                    THEN if_abap_behv=>fc-o-disabled
-                    ELSE if_abap_behv=>fc-o-enabled )
+                              THEN if_abap_behv=>fc-o-disabled
+                              ELSE if_abap_behv=>fc-o-enabled )
       ) TO result.
     ENDLOOP.
 
@@ -624,6 +635,15 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
+
+        " Assign counter 1 — only one partner is allowed per notification.
+        " The UI Create button is disabled once a partner exists (see get_instance_features).
+        APPEND VALUE #(
+            %tky                = ls_new_partner-%tky
+            %key-NotificationNo = ls_parent-NotificationNo
+            %key-PartnerCounter = 1
+        ) TO mapped-partner.
+
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
             parvw    = 'VU'
@@ -650,7 +670,6 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       ) TO lhc_zr_pm_notif=>gt_assign_buffer.
     ENDLOOP.
   ENDMETHOD.
-
 
   METHOD createOrder.
     " 1. Read current data from the RAP Buffer
