@@ -651,19 +651,20 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD delete_partner.
-    " This method is called when the user removes a partner and clicks Save.
-    LOOP AT keys INTO DATA(ls_deleted_partner).
+    " Read the full partner data to get PartnerCounter (needed to identify the ihpa row)
+    READ ENTITIES OF zr_pm_notif IN LOCAL MODE
+      ENTITY Partner
+      ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(lt_partners).
 
-      " Add it to the global buffer with the 'Delete' flag
+    LOOP AT lt_partners INTO DATA(ls_partner).
       APPEND VALUE #(
-          notif_no = ls_deleted_partner-NotificationNo
+          notif_no = ls_partner-NotificationNo
           parvw    = 'VU'
-          partner  = ls_deleted_partner-PartnerCounter
+          partner  = ls_partner-PartnerCounter
           updkz    = 'D'
       ) TO lhc_zr_pm_notif=>gt_assign_buffer.
-
     ENDLOOP.
-
   ENDMETHOD.
 
 
