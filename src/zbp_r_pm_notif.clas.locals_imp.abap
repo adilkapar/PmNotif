@@ -674,7 +674,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         ELSE lv_max_assigned ).
 
       APPEND VALUE #(
-        %is_draft            = ls_entity-%is_draft
+        %is_draft            = if_abap_behv=>mk-on
         %key-NotificationNo  = ls_entity-%key-NotificationNo
         %key-PartnerCounter  = lv_base + 1
       ) TO mapped-partner.
