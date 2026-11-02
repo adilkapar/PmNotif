@@ -624,15 +624,22 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
-      " Start at 900000 to avoid colliding with real ihpa counters (000001, 000002, ...)
-      " ihpa.counter is NUMC 6 — real values are small sequential numbers
+      DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
+
+      " Get max counter from real DB (ihpa)
+      SELECT SINGLE MAX( counter ) FROM ihpa
+        WHERE objnr = @lv_objnr AND parvw = 'VU'
+        INTO @DATA(lv_ihpa_max).
+
+      " Get max counter from draft table (pending rows not yet saved)
       SELECT MAX( PartnerCounter ) FROM zpm_notifp_d
         WHERE NotificationNo = @ls_parent-NotificationNo
         INTO @DATA(lv_draft_max).
 
+      " Take the highest of the two, then add 1 for the new row
       DATA(lv_next) = COND i(
-        WHEN lv_draft_max >= 900000 THEN lv_draft_max
-        ELSE 900000 ).
+        WHEN lv_ihpa_max > lv_draft_max THEN lv_ihpa_max
+        ELSE lv_draft_max ).
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
