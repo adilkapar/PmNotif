@@ -6,9 +6,7 @@ define view entity ZC_PM_NotifPartner
   as projection on ZR_PM_NotifPartner
 {
   key NotificationNo,
-  key DraftSeqNo,
-      PartnerCounter,
-
+  key PartnerCounter,
       PartnerFunction,
 
       @EndUserText.label: 'Partner'

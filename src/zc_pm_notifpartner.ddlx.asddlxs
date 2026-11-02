@@ -11,8 +11,5 @@ annotate view ZC_PM_NotifPartner with
   NotificationNo;
 
   @UI.hidden: true
-  DraftSeqNo;
-
-  @UI.hidden: true
   PartnerCounter;
 }
