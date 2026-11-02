@@ -627,10 +627,8 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
-        " Return placeholder key — adjust_numbers will assign the real unique PartnerCounter.
         INSERT VALUE #( %cid           = ls_new_partner-%cid
-                        NotificationNo = ls_parent-NotificationNo
-                        PartnerCounter = '000000' )
+                        NotificationNo = ls_parent-NotificationNo )
                INTO TABLE mapped-partner.
 
         APPEND VALUE #(
