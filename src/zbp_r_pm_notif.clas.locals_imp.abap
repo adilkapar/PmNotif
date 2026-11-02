@@ -650,7 +650,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
             INTO @DATA(lv_hit).
           IF lv_hit = abap_true. lv_next += 1. IF lv_next > 999999. lv_next = 900001. ENDIF. CONTINUE. ENDIF.
           SELECT SINGLE @abap_true FROM zpm_notifp_d
-            WHERE mandt = @sy-mandt AND notificationno = @ls_parent-NotificationNo
+            WHERE notificationno = @ls_parent-NotificationNo
               AND partnercounter = @lv_ctr
             INTO @lv_hit.
           IF lv_hit = abap_true. lv_next += 1. IF lv_next > 999999. lv_next = 900001. ENDIF. CONTINUE. ENDIF.
