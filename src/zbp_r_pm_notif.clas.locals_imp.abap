@@ -628,6 +628,21 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       " Loop through the new child rows added to this parent
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
+        " Guard against adding the same partner twice in one draft session
+        READ TABLE lhc_zr_pm_notif=>gt_assign_buffer
+          TRANSPORTING NO FIELDS
+          WITH KEY notif_no = ls_parent-NotificationNo
+                   partner  = ls_new_partner-Partner
+                   updkz    = 'I'.
+        IF sy-subrc = 0.
+          APPEND VALUE #( %cid = ls_new_partner-%cid
+                          %msg = new_message_with_text(
+                            severity = if_abap_behv_message=>severity-warning
+                            text     = |Partner { ls_new_partner-Partner } is already queued for assignment.| )
+                        ) TO reported-partner.
+          CONTINUE.
+        ENDIF.
+
         " Add it to the global buffer with the 'Insert' flag
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
