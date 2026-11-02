@@ -647,9 +647,12 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
           WHERE notificationno = @ls_parent-NotificationNo
           INTO @DATA(lv_max_draft_cba).
 
-        DATA(lv_next_ctr) = COND #( WHEN lv_max_ihpa_cba > lv_max_draft_cba
-                                     THEN lv_max_ihpa_cba + 1
-                                     ELSE lv_max_draft_cba + 1 ).
+        DATA lv_next_ctr TYPE ihpa-counter.
+        IF lv_max_ihpa_cba > lv_max_draft_cba.
+          lv_next_ctr = lv_max_ihpa_cba + 1.
+        ELSE.
+          lv_next_ctr = lv_max_draft_cba + 1.
+        ENDIF.
 
         INSERT VALUE #( %cid            = ls_new_partner-%cid
                         NotificationNo  = ls_parent-NotificationNo
