@@ -26,14 +26,6 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
 
     CLASS-DATA gt_assign_buffer TYPE TABLE OF ty_assign_buffer.
 
-    " Tracks the highest PartnerCounter issued per notification in this session.
-    " Keyed by notification number so multiple notifications work independently.
-    TYPES: BEGIN OF ty_ctr_entry,
-             notif_no TYPE qmnum,
-             max_ctr  TYPE i,
-           END OF ty_ctr_entry.
-    CLASS-DATA gt_ctr_map TYPE TABLE OF ty_ctr_entry WITH KEY notif_no.
-
     TYPES: BEGIN OF ty_notif_update,
              notif_no     TYPE qmnum,
              short_text   TYPE qmtxt,
@@ -630,38 +622,38 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
 
   METHOD cba_Partner.
+    " Use current timestamp as base for a unique draft counter.
+    " ihpa.counter is NUMC 6. Real SAP-assigned values are tiny (000001, 000002...).
+    " We use 9XYZAB pattern (leading 9 ensures no collision with real counters).
+    DATA(lv_time)  = CONV i( sy-uzeit ).   " HHMMSS as integer, max 235959
+    DATA(lv_base)  = 900000 + ( lv_time MOD 99999 ).  " Range 900000–999999
+
     LOOP AT entities_cba INTO DATA(ls_parent).
 
-      " Look up the running counter for this notification in the session map
-      READ TABLE lhc_zr_pm_notif=>gt_ctr_map
-        ASSIGNING FIELD-SYMBOL(<fs_ctr>)
-        WITH KEY notif_no = ls_parent-NotificationNo.
-
-      IF sy-subrc <> 0.
-        " First call for this notification — seed from DB (ihpa) and draft table
-        DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
-
-        SELECT SINGLE MAX( counter ) FROM ihpa
-          WHERE objnr = @lv_objnr AND parvw = 'VU'
-          INTO @DATA(lv_ihpa_max).
-
-        SELECT MAX( PartnerCounter ) FROM zpm_notifp_d
-          WHERE NotificationNo = @ls_parent-NotificationNo
-          INTO @DATA(lv_draft_max).
-
-        DATA(lv_seed) = COND i(
-          WHEN lv_ihpa_max > lv_draft_max THEN lv_ihpa_max
-          ELSE lv_draft_max ).
-
-        APPEND VALUE #( notif_no = ls_parent-NotificationNo
-                        max_ctr  = lv_seed )
-               TO lhc_zr_pm_notif=>gt_ctr_map
-               ASSIGNING <fs_ctr>.
-      ENDIF.
+      DATA(lv_next) = lv_base.
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        <fs_ctr>-max_ctr += 1.
+        lv_next += 1.
+
+        " Verify this counter does not already exist in ihpa or draft table
+        DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
+        DO 9999 TIMES.
+          SELECT SINGLE @abap_true FROM ihpa
+            WHERE objnr = @lv_objnr AND counter = @lv_next
+            INTO @DATA(lv_exists_ihpa).
+          IF lv_exists_ihpa = abap_true.
+            lv_next += 1. CONTINUE.
+          ENDIF.
+          SELECT SINGLE @abap_true FROM zpm_notifp_d
+            WHERE NotificationNo = @ls_parent-NotificationNo
+              AND PartnerCounter  = @lv_next
+            INTO @DATA(lv_exists_draft).
+          IF lv_exists_draft = abap_true.
+            lv_next += 1. CONTINUE.
+          ENDIF.
+          EXIT.
+        ENDDO.
 
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
@@ -672,7 +664,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
-                        PartnerCounter = <fs_ctr>-max_ctr )
+                        PartnerCounter = lv_next )
                INTO TABLE mapped-partner.
 
       ENDLOOP.
@@ -1284,7 +1276,6 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
 
 
   METHOD cleanup.
-    CLEAR lhc_zr_pm_notif=>gt_ctr_map.
   ENDMETHOD.
 
   METHOD cleanup_finalize.
