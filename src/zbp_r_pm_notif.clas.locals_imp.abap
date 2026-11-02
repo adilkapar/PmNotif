@@ -627,10 +627,6 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
-        INSERT VALUE #( %cid           = ls_new_partner-%cid
-                        NotificationNo = ls_parent-NotificationNo )
-               INTO TABLE mapped-partner.
-
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
             parvw    = 'VU'
