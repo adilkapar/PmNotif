@@ -25,7 +25,6 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
            END OF ty_assign_buffer.
 
     CLASS-DATA gt_assign_buffer TYPE TABLE OF ty_assign_buffer.
-    CLASS-DATA gv_partner_ctr   TYPE i VALUE 0.
 
     TYPES: BEGIN OF ty_notif_update,
              notif_no     TYPE qmnum,
@@ -625,10 +624,27 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
   METHOD cba_Partner.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
+      " Find the current highest counter in both the real DB and the draft table
+      " so each new row gets a key that is guaranteed unique
+      DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
+
+      SELECT SINGLE MAX( counter ) FROM ihpa
+        WHERE objnr = @lv_objnr
+          AND parvw = 'VU'
+        INTO @DATA(lv_max_ctr).
+
+      " Also check the draft table for any pending (not yet saved) rows
+      SELECT MAX( PartnerCounter ) FROM zpm_notifp_d
+        WHERE NotificationNo = @ls_parent-NotificationNo
+        INTO @DATA(lv_max_draft_ctr).
+
+      DATA(lv_next_ctr) = COND i(
+        WHEN lv_max_draft_ctr > lv_max_ctr THEN lv_max_draft_ctr
+        ELSE lv_max_ctr ).
+
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Increment the session-wide counter so every new draft row gets a unique key
-        lhc_zr_pm_notif=>gv_partner_ctr += 1.
+        lv_next_ctr += 1.
 
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
@@ -640,7 +656,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         INSERT VALUE #( %cid            = ls_new_partner-%cid
                         NotificationNo  = ls_parent-NotificationNo
                         PartnerFunction = 'VU'
-                        PartnerCounter  = lhc_zr_pm_notif=>gv_partner_ctr )
+                        PartnerCounter  = lv_next_ctr )
                INTO TABLE mapped-partner.
 
       ENDLOOP.
