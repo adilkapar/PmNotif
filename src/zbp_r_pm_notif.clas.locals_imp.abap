@@ -625,36 +625,27 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
     " This method is called when the user adds a new partner and clicks Save.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
+      DATA(lv_counter) = 0.
+
       " Loop through the new child rows added to this parent
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Guard against adding the same partner twice in one draft session
-        READ TABLE lhc_zr_pm_notif=>gt_assign_buffer
-          TRANSPORTING NO FIELDS
-          WITH KEY notif_no = ls_parent-NotificationNo
-                   partner  = ls_new_partner-Partner
-                   updkz    = 'I'.
-        IF sy-subrc = 0.
-          APPEND VALUE #( %cid = ls_new_partner-%cid
-                          %msg = new_message_with_text(
-                            severity = if_abap_behv_message=>severity-warning
-                            text     = |Partner { ls_new_partner-Partner } is already queued for assignment.| )
-                        ) TO reported-partner.
-          CONTINUE.
-        ENDIF.
+        lv_counter += 1.
 
         " Add it to the global buffer with the 'Insert' flag
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
-            parvw    = 'VU' " <-- FIX: Ignores UI and forces 'VU'
+            parvw    = 'VU'
             partner  = ls_new_partner-Partner
             updkz    = 'I' " I = Insert
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        " Map the temporary Content ID (%cid) to tell Fiori it was successful
+        " Map the temporary Content ID (%cid) to tell Fiori it was successful.
+        " PartnerCounter must be unique per row so the draft table key is distinct.
         INSERT VALUE #( %cid            = ls_new_partner-%cid
                         NotificationNo  = ls_parent-NotificationNo
-                        PartnerFunction = ls_new_partner-PartnerFunction )
+                        PartnerFunction = 'VU'
+                        PartnerCounter  = lv_counter )
                INTO TABLE mapped-partner.
 
       ENDLOOP.
