@@ -8,8 +8,8 @@ define view Zv_PM_Notifpartner
       inner join   I_MaintenanceNotification as _Notification on _Notification.MaintNotifInternalID = partner.objnr
 {
   key _Notification.MaintenanceNotification as NotificationNo,
-  key cast ( partner.parvw as char2 )       as PartnerFunction,
   key partner.counter                       as PartnerCounter,
+      cast ( partner.parvw as char2 )       as PartnerFunction,
       partner.parnr                         as Partner}
 where
       partner.objnr    like 'QM%'

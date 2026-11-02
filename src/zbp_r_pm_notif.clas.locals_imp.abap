@@ -645,10 +645,11 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
             updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        INSERT VALUE #( %cid            = ls_new_partner-%cid
-                        NotificationNo  = ls_parent-NotificationNo
-                        PartnerFunction = 'VU'
-                        PartnerCounter  = |{ lv_next_i ALPHA = IN WIDTH = 4 }| )
+        DATA(lv_ctr) = CONV char4( lv_next_i ).
+
+        INSERT VALUE #( %cid           = ls_new_partner-%cid
+                        NotificationNo = ls_parent-NotificationNo
+                        PartnerCounter = lv_ctr )
                INTO TABLE mapped-partner.
 
       ENDLOOP.
@@ -662,9 +663,9 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       " Add it to the global buffer with the 'Delete' flag
       APPEND VALUE #(
           notif_no = ls_deleted_partner-NotificationNo
-          parvw    = ls_deleted_partner-PartnerFunction
-          partner  = ls_deleted_partner-PartnerCounter " Or Partner ID depending on your key
-          updkz    = 'D' " D = Delete
+          parvw    = 'VU'
+          partner  = ls_deleted_partner-PartnerCounter
+          updkz    = 'D'
       ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
     ENDLOOP.

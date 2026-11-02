@@ -44,7 +44,7 @@ authorization dependent by _Notif
   delete;
 
   // Prevent users from changing the parent key on the child row
-  field ( readonly ) NotificationNo, PartnerFunction;
+  field ( readonly ) NotificationNo;
 
   // Link draft back to the parent
   association _Notif { with draft; }
