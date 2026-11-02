@@ -627,35 +627,32 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Generate a UUID per row — globally unique, independent of any DB state.
-        " Convert to raw bytes and use as seed for the counter.
-        DATA lv_uuid_raw TYPE sysuuid_x16.
-        TRY.
-            lv_uuid_raw = cl_system_uuid=>create_uuid_x16_static( ).
-          CATCH cx_uuid_error.
-            lv_uuid_raw = '00000000000000000000000000000001'.
-        ENDTRY.
-        " Take last 4 bytes as integer, map to 900001-999999
-        DATA lv_raw4 TYPE x LENGTH 4.
-        lv_raw4 = lv_uuid_raw+12(4).
+        " Find the highest counter in IHPA and draft table, start one above it.
+        " Also check the already-mapped entries in THIS call to handle same-batch requests.
+        DATA lv_max TYPE i.
+        DATA lv_val TYPE i.
+
+        SELECT SINGLE MAX( counter ) FROM ihpa
+          WHERE objnr = @lv_objnr
+          INTO @lv_val.
+        IF lv_val > lv_max. lv_max = lv_val. ENDIF.
+
+        SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+          WHERE notificationno = @ls_parent-NotificationNo
+          INTO @lv_val.
+        IF lv_val > lv_max. lv_max = lv_val. ENDIF.
+
+        " Also check what we already put in mapped-partner this call (same-batch safety)
+        LOOP AT mapped-partner INTO DATA(ls_already) WHERE NotificationNo = ls_parent-NotificationNo.
+          lv_val = ls_already-PartnerCounter.
+          IF lv_val > lv_max. lv_max = lv_val. ENDIF.
+        ENDLOOP.
+
         DATA lv_next TYPE i.
-        lv_next = lv_raw4.
-        lv_next = 900001 + ABS( lv_next MOD 99999 ).
+        lv_next = lv_max + 1.
 
         DATA lv_ctr TYPE i_count.
-        DO 99999 TIMES.
-          lv_ctr = lv_next.
-          SELECT SINGLE @abap_true FROM ihpa
-            WHERE objnr = @lv_objnr AND counter = @lv_ctr
-            INTO @DATA(lv_hit).
-          IF lv_hit = abap_true. lv_next += 1. IF lv_next > 999999. lv_next = 900001. ENDIF. CONTINUE. ENDIF.
-          SELECT SINGLE @abap_true FROM zpm_notifp_d
-            WHERE notificationno = @ls_parent-NotificationNo
-              AND partnercounter = @lv_ctr
-            INTO @lv_hit.
-          IF lv_hit = abap_true. lv_next += 1. IF lv_next > 999999. lv_next = 900001. ENDIF. CONTINUE. ENDIF.
-          EXIT.
-        ENDDO.
+        lv_ctr = lv_next.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
