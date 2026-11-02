@@ -25,6 +25,7 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
            END OF ty_assign_buffer.
 
     CLASS-DATA gt_assign_buffer TYPE TABLE OF ty_assign_buffer.
+    CLASS-DATA gv_partner_ctr   TYPE i VALUE 0.
 
     TYPES: BEGIN OF ty_notif_update,
              notif_no     TYPE qmnum,
@@ -622,30 +623,24 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
 
   METHOD cba_Partner.
-    " This method is called when the user adds a new partner and clicks Save.
     LOOP AT entities_cba INTO DATA(ls_parent).
 
-      DATA(lv_counter) = 0.
-
-      " Loop through the new child rows added to this parent
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        lv_counter += 1.
+        " Increment the session-wide counter so every new draft row gets a unique key
+        lhc_zr_pm_notif=>gv_partner_ctr += 1.
 
-        " Add it to the global buffer with the 'Insert' flag
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
             parvw    = 'VU'
             partner  = ls_new_partner-Partner
-            updkz    = 'I' " I = Insert
+            updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        " Map the temporary Content ID (%cid) to tell Fiori it was successful.
-        " PartnerCounter must be unique per row so the draft table key is distinct.
         INSERT VALUE #( %cid            = ls_new_partner-%cid
                         NotificationNo  = ls_parent-NotificationNo
                         PartnerFunction = 'VU'
-                        PartnerCounter  = lv_counter )
+                        PartnerCounter  = lhc_zr_pm_notif=>gv_partner_ctr )
                INTO TABLE mapped-partner.
 
       ENDLOOP.
