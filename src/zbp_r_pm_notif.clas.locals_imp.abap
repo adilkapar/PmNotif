@@ -646,9 +646,9 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
       DATA(lv_max_ihpa)  = CONV ihpa-counter( 0 ).
       DATA(lv_max_draft) = CONV zpm_notifp_d-partnercounter( 0 ).
-      DATA(lv_objnr)     = |QM{ ls_entity-NotificationNo }|.
+      DATA(lv_objnr)     = |QM{ ls_entity-%key-NotificationNo }|.
 
-      IF ls_entity-NotificationNo IS NOT INITIAL.
+      IF ls_entity-%key-NotificationNo IS NOT INITIAL.
         SELECT SINGLE MAX( counter )
           FROM ihpa
           WHERE objnr = @lv_objnr AND parvw = 'VU'
@@ -656,14 +656,13 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
         SELECT SINGLE MAX( partnercounter )
           FROM zpm_notifp_d
-          WHERE notificationno = @ls_entity-NotificationNo
+          WHERE notificationno = @ls_entity-%key-NotificationNo
           INTO @lv_max_draft.
       ENDIF.
 
-      " Also account for counters already assigned in this call (multiple adds at once)
       DATA(lv_max_assigned) = CONV zpm_notifp_d-partnercounter( 0 ).
       LOOP AT mapped-partner INTO DATA(ls_mapped)
-        WHERE %key-NotificationNo = ls_entity-NotificationNo.
+        WHERE %key-NotificationNo = ls_entity-%key-NotificationNo.
         IF ls_mapped-%key-PartnerCounter > lv_max_assigned.
           lv_max_assigned = ls_mapped-%key-PartnerCounter.
         ENDIF.
@@ -675,8 +674,9 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
         ELSE lv_max_assigned ).
 
       APPEND VALUE #(
-        %is_draft            = if_abap_behv=>mk-on
-        %key-NotificationNo  = ls_entity-NotificationNo
+        %cid                 = ls_entity-%cid
+        %is_draft            = ls_entity-%is_draft
+        %key-NotificationNo  = ls_entity-%key-NotificationNo
         %key-PartnerCounter  = lv_base + 1
       ) TO mapped-partner.
 
