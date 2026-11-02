@@ -642,7 +642,10 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
         lv_max_seq = lv_max_seq + 1.
         DATA lv_uuid TYPE sysuuid_c32.
-        lv_uuid = lv_max_seq.
+        DATA lv_seq_str TYPE string.
+        lv_seq_str = lv_max_seq.
+        CONDENSE lv_seq_str NO-GAPS.
+        lv_uuid = lv_seq_str.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
                         NotificationNo = ls_parent-NotificationNo
