@@ -7,6 +7,7 @@ annotate view ZC_PM_NotifPartner with
   @UI.lineItem: [{ position: 20, label: 'Partner ID' }]
   Partner;
 
+  // You can hide the keys that shouldn't be edited by the user
   @UI.hidden: true
   NotificationNo;
 

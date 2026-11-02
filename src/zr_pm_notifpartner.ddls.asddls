@@ -6,8 +6,9 @@ define view entity ZR_PM_NotifPartner
   association to parent ZR_PM_NOTIF as _Notif on $projection.NotificationNo = _Notif.NotificationNo
 {
   key partner.NotificationNo,
+  key partner.PartnerFunction,
   key partner.PartnerCounter,
-      partner.PartnerFunction,
       partner.Partner,
+
       _Notif
 }

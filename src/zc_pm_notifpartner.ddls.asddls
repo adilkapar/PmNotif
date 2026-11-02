@@ -6,8 +6,8 @@ define view entity ZC_PM_NotifPartner
   as projection on ZR_PM_NotifPartner
 {
   key NotificationNo,
+  key PartnerFunction,
   key PartnerCounter,
-      PartnerFunction,
 
       @EndUserText.label: 'Partner'
       @Consumption.valueHelpDefinition: [{

@@ -21,7 +21,7 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
              notif_no TYPE qmnum,
              parvw    TYPE parvw,
              partner  TYPE bu_partner,
-             updkz    TYPE char1,
+             updkz    TYPE char1, " 'I' for Insert, 'D' for Delete
            END OF ty_assign_buffer.
 
     CLASS-DATA gt_assign_buffer TYPE TABLE OF ty_assign_buffer.
@@ -180,6 +180,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
     DATA(lv_is_supervisor) = abap_false.
 
+    " 1. Check Authorization
     AUTHORITY-CHECK OBJECT 'ZPM_NOTIF'
       ID 'ZPM_ROLE' FIELD 'SUP'
       ID 'ACTVT'    DUMMY.
@@ -188,15 +189,17 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       lv_is_supervisor = abap_true.
     ENDIF.
 
+    " 2. CLEAN CORE: Read the buffered data to check if an order exists
     READ ENTITIES OF zr_pm_notif IN LOCAL MODE
       ENTITY Notification
-      FIELDS ( MaintenanceOrder )
+      FIELDS ( MaintenanceOrder ) " <-- Adjust to your exact CDS field name
       WITH CORRESPONDING #( keys )
       RESULT DATA(lt_notif_data).
 
     LOOP AT keys INTO DATA(ls_key).
       DATA(lv_order_exists) = abap_false.
 
+      " Look up the data we just read for this specific row
       READ TABLE lt_notif_data INTO DATA(ls_notif) WITH KEY %tky = ls_key-%tky.
       IF sy-subrc = 0 AND ls_notif-MaintenanceOrder IS NOT INITIAL.
         lv_order_exists = abap_true.
@@ -205,22 +208,25 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       APPEND VALUE #(
         %tky                = ls_key-%tky
 
-        %update             = COND #( WHEN lv_order_exists = abap_true
-                              THEN if_abap_behv=>fc-o-disabled
-                              ELSE if_abap_behv=>fc-o-enabled )
+        " NEW: Disable standard Edit/Draft creation if an Order already exists
+        %update             = COND #( WHEN lv_order_exists  = abap_true
+        THEN if_abap_behv=>fc-o-disabled
+        ELSE if_abap_behv=>fc-o-enabled )
 
-        %delete             = COND #( WHEN lv_order_exists = abap_true
-                              THEN if_abap_behv=>fc-o-disabled
-                              ELSE if_abap_behv=>fc-o-enabled )
+        %delete             = COND #( WHEN lv_order_exists  = abap_true
+        THEN if_abap_behv=>fc-o-disabled
+        ELSE if_abap_behv=>fc-o-enabled )
 
+        " Partner Button Control
         %assoc-_Partner     = COND #( WHEN lv_is_supervisor = abap_true
-                                       OR  lv_order_exists  = abap_true
-                              THEN if_abap_behv=>fc-o-enabled
-                              ELSE if_abap_behv=>fc-o-disabled )
+                    OR                     lv_order_exists  = abap_true
+        THEN if_abap_behv=>fc-o-enabled
+        ELSE if_abap_behv=>fc-o-disabled )
 
+        " BM Order Button Control (Grey out if Operator OR if Order exists)
         %action-createOrder = COND #( WHEN lv_is_supervisor = abap_false OR lv_order_exists = abap_true
-                              THEN if_abap_behv=>fc-o-disabled
-                              ELSE if_abap_behv=>fc-o-enabled )
+                    THEN if_abap_behv=>fc-o-disabled
+                    ELSE if_abap_behv=>fc-o-enabled )
       ) TO result.
     ENDLOOP.
 
@@ -616,38 +622,46 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
 
   METHOD cba_Partner.
+    " This method is called when the user adds a new partner and clicks Save.
     LOOP AT entities_cba INTO DATA(ls_parent).
+
+      " Loop through the new child rows added to this parent
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
+
+        " Add it to the global buffer with the 'Insert' flag
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
-            parvw    = 'VU'
+            parvw    = 'VU' " <-- FIX: Ignores UI and forces 'VU'
             partner  = ls_new_partner-Partner
-            updkz    = 'I'
+            updkz    = 'I' " I = Insert
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        INSERT VALUE #( %cid           = ls_new_partner-%cid
-                        NotificationNo = ls_parent-NotificationNo )
+        " Map the temporary Content ID (%cid) to tell Fiori it was successful
+        INSERT VALUE #( %cid            = ls_new_partner-%cid
+                        NotificationNo  = ls_parent-NotificationNo
+                        PartnerFunction = ls_new_partner-PartnerFunction )
                INTO TABLE mapped-partner.
+
       ENDLOOP.
     ENDLOOP.
   ENDMETHOD.
 
   METHOD delete_partner.
-    " Read the full partner data to get PartnerCounter (needed to identify the ihpa row)
-    READ ENTITIES OF zr_pm_notif IN LOCAL MODE
-      ENTITY Partner
-      ALL FIELDS WITH CORRESPONDING #( keys )
-      RESULT DATA(lt_partners).
+    " This method is called when the user removes a partner and clicks Save.
+    LOOP AT keys INTO DATA(ls_deleted_partner).
 
-    LOOP AT lt_partners INTO DATA(ls_partner).
+      " Add it to the global buffer with the 'Delete' flag
       APPEND VALUE #(
-          notif_no = ls_partner-NotificationNo
-          parvw    = 'VU'
-          partner  = ls_partner-PartnerCounter
-          updkz    = 'D'
+          notif_no = ls_deleted_partner-NotificationNo
+          parvw    = ls_deleted_partner-PartnerFunction
+          partner  = ls_deleted_partner-PartnerCounter " Or Partner ID depending on your key
+          updkz    = 'D' " D = Delete
       ) TO lhc_zr_pm_notif=>gt_assign_buffer.
+
     ENDLOOP.
+
   ENDMETHOD.
+
 
   METHOD createOrder.
     " 1. Read current data from the RAP Buffer
@@ -684,10 +698,10 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       ENDIF.
 
       IF NOT ls_notif-NotificationNo IS INITIAL.
-        READ ENTITIES OF zr_pm_notif IN LOCAL MODE
-          ENTITY Notification BY \_Partner
-          ALL FIELDS WITH VALUE #( ( %tky = ls_key-%tky ) )
-          RESULT DATA(lt_notif_partner).
+        SELECT NotificationNo, Partner
+         FROM ZR_PM_NotifPartner
+         WHERE NotificationNo = @ls_notif-NotificationNo
+         INTO TABLE @DATA(lt_notif_partner).
         IF lt_notif_partner[] IS INITIAL.
           APPEND VALUE #( %tky = ls_key-%tky ) TO failed-notification.
           APPEND VALUE #( %tky = ls_key-%tky
