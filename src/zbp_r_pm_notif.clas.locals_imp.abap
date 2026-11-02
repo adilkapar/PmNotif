@@ -625,13 +625,23 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
     LOOP AT entities_cba INTO DATA(ls_parent).
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Generate a UUID as the draft key — cryptographically unique per call,
-        " no dependency on DB state, never collides in the change buffer.
-        DATA lv_uuid TYPE sysuuid_c32.
+        " Use %cid as draft key — it is guaranteed unique per create operation by Fiori.
+        " Hash it to 32 chars to fit SYSUUID_C32.
+        DATA lv_uuid   TYPE sysuuid_c32.
+        DATA lv_raw16  TYPE sysuuid_x16.
+        DATA lv_cid_x  TYPE xstring.
+
+        cl_abap_message_digest=>calculate_hash_for_char(
+          EXPORTING if_algorithm = 'MD5'
+                    if_data      = CONV string( ls_new_partner-%cid )
+          IMPORTING ef_hashvalue = lv_cid_x ).
+        lv_raw16 = lv_cid_x.
         TRY.
-            lv_uuid = cl_system_uuid=>create_uuid_c32_static( ).
+            lv_uuid = cl_system_uuid=>convert_uuid_x16_static(
+                        EXPORTING uuid = lv_raw16 ).
           CATCH cx_uuid_error.
-            lv_uuid = '00000000000000000000000000000001'.
+            " Fallback: pad %cid directly
+            lv_uuid = |{ ls_new_partner-%cid : align = LEFT, width = 32, pad = '0' }|.
         ENDTRY.
 
         INSERT VALUE #( %cid           = ls_new_partner-%cid
