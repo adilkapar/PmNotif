@@ -106,6 +106,10 @@ CLASS lhc_ZR_PM_NOTIF DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS delete_partner FOR MODIFY
       IMPORTING keys FOR DELETE Partner.
 
+    " 5. Early numbering: assigns unique PartnerCounter BEFORE buffer write
+    METHODS earlynumbering_cba_Partner FOR NUMBERING
+      IMPORTING entities FOR CREATE Notification\_Partner.
+
     METHODS createOrder FOR MODIFY
       IMPORTING keys FOR ACTION Notification~createOrder.
 
@@ -576,7 +580,7 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       " Same equipment + same date + same basic/detail stoppage codes
       " =========================================================
       SELECT SINGLE NotificationNo
-        FROM ZR_PM_NOTIF
+        FROM zr_pm_notif
         WHERE EquipmentNo  = @ls_param-Equipment
           AND CreationDate = @( cl_abap_context_info=>get_system_date( ) )
           AND BasicCode    = @ls_param-dl_code
@@ -620,48 +624,99 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
   ENDMETHOD.
 
+*  METHOD cba_Partner.
+*    " This method is called when the user adds a new partner and clicks Save.
+*    LOOP AT entities_cba INTO DATA(ls_parent).
+*
+*      " Loop through the new child rows added to this parent
+*      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
+*
+*        " Add it to the global buffer with the 'Insert' flag
+*        APPEND VALUE #(
+*            notif_no = ls_parent-NotificationNo
+*            parvw    = 'VU' " <-- FIX: Ignores UI and forces 'VU'
+*            partner  = ls_new_partner-Partner
+*            updkz    = 'I' " I = Insert
+*        ) TO lhc_zr_pm_notif=>gt_assign_buffer.
+*
+*        " >>>>>>>>>> CHANGE START: assign PartnerCounter from MAX(ihpa)+MAX(draft)+1
+*        DATA(lv_objnr_cba) = |QM{ ls_parent-NotificationNo }|.
+*
+*        SELECT SINGLE MAX( counter ) FROM ihpa
+*          WHERE objnr = @lv_objnr_cba AND parvw = 'VU'
+*          INTO @DATA(lv_max_ihpa_cba).
+*
+*        SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+*          WHERE notificationno = @ls_parent-NotificationNo
+*          INTO @DATA(lv_max_draft_cba).
+*
+*        DATA lv_next_ctr TYPE ihpa-counter.
+*        IF lv_max_ihpa_cba > lv_max_draft_cba.
+*          lv_next_ctr = lv_max_ihpa_cba + 1.
+*        ELSE.
+*          lv_next_ctr = lv_max_draft_cba + 1.
+*        ENDIF.
+*
+*        INSERT VALUE #( %cid            = ls_new_partner-%cid
+*                        NotificationNo  = ls_parent-NotificationNo
+*                        PartnerFunction = 'VU'
+*                        PartnerCounter  = lv_next_ctr )
+*               INTO TABLE mapped-partner.
+*        " <<<<<<<<<< CHANGE END
+*
+*      ENDLOOP.
+*    ENDLOOP.
+*  ENDMETHOD.
 
   METHOD cba_Partner.
-    " This method is called when the user adds a new partner and clicks Save.
+    " This method fires during ACTIVATION (Save), not during draft editing.
+    " At this point, the draft table already has rows with correct counters
+    " (set by the determination assign_partner_counter).
+    " We use those counters as-is and also populate the BAPI buffer.
+
     LOOP AT entities_cba INTO DATA(ls_parent).
 
-      " Loop through the new child rows added to this parent
+      " 1. Determine the baseline counter ONCE per parent (outside inner loop)
+      DATA(lv_objnr_cba) = |QM{ ls_parent-NotificationNo }|.
+
+      SELECT SINGLE MAX( counter ) FROM ihpa
+        WHERE objnr = @lv_objnr_cba AND parvw = 'VU'
+        INTO @DATA(lv_max_ihpa_cba).
+
+      SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+        WHERE notificationno = @ls_parent-NotificationNo
+        INTO @DATA(lv_max_draft_cba).
+
+      " Take the higher of the two as baseline
+      DATA(lv_base_ctr) = COND ihpa-counter(
+        WHEN lv_max_ihpa_cba > lv_max_draft_cba
+        THEN lv_max_ihpa_cba
+        ELSE lv_max_draft_cba ).
+
+      " 2. Loop through ALL new child rows and INCREMENT for each
       LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
 
-        " Add it to the global buffer with the 'Insert' flag
+        lv_base_ctr += 1.
+
+        " Add to the global buffer for the Saver class BAPI calls
         APPEND VALUE #(
             notif_no = ls_parent-NotificationNo
-            parvw    = 'VU' " <-- FIX: Ignores UI and forces 'VU'
+            parvw    = 'VU'
             partner  = ls_new_partner-Partner
-            updkz    = 'I' " I = Insert
+            updkz    = 'I'
         ) TO lhc_zr_pm_notif=>gt_assign_buffer.
 
-        " >>>>>>>>>> CHANGE START: assign PartnerCounter from MAX(ihpa)+MAX(draft)+1
-        DATA(lv_objnr_cba) = |QM{ ls_parent-NotificationNo }|.
-
-        SELECT SINGLE MAX( counter ) FROM ihpa
-          WHERE objnr = @lv_objnr_cba AND parvw = 'VU'
-          INTO @DATA(lv_max_ihpa_cba).
-
-        SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
-          WHERE notificationno = @ls_parent-NotificationNo
-          INTO @DATA(lv_max_draft_cba).
-
-        DATA lv_next_ctr TYPE ihpa-counter.
-        IF lv_max_ihpa_cba > lv_max_draft_cba.
-          lv_next_ctr = lv_max_ihpa_cba + 1.
-        ELSE.
-          lv_next_ctr = lv_max_draft_cba + 1.
-        ENDIF.
-
+        " Return mapped keys with UNIQUE counter per row
         INSERT VALUE #( %cid            = ls_new_partner-%cid
                         NotificationNo  = ls_parent-NotificationNo
                         PartnerFunction = 'VU'
-                        PartnerCounter  = lv_next_ctr )
+                        PartnerCounter  = lv_base_ctr )
                INTO TABLE mapped-partner.
-        " <<<<<<<<<< CHANGE END
 
       ENDLOOP.
+
+      CLEAR: lv_max_ihpa_cba, lv_max_draft_cba, lv_base_ctr.
+
     ENDLOOP.
   ENDMETHOD.
 
@@ -676,6 +731,58 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
           partner  = ls_deleted_partner-PartnerCounter " Or Partner ID depending on your key
           updkz    = 'D' " D = Delete
       ) TO lhc_zr_pm_notif=>gt_assign_buffer.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD earlynumbering_cba_Partner.
+    " ================================================================
+    " PURPOSE: This fires BEFORE the framework writes the entity to
+    " its internal transactional buffer. It provides the key values
+    " (PartnerCounter) so each new partner row gets a unique counter.
+    "
+    " Without this, the framework assigns counter=000000 to every new
+    " partner, causing a MERGE_CREATE duplicate crash on the 2nd "+".
+    " ================================================================
+
+    LOOP AT entities INTO DATA(ls_parent).
+
+      " 1. Determine baseline counter from persisted data (IHPA)
+      DATA(lv_objnr) = |QM{ ls_parent-NotificationNo }|.
+
+      SELECT SINGLE MAX( counter ) FROM ihpa
+        WHERE objnr = @lv_objnr AND parvw = 'VU'
+        INTO @DATA(lv_max_ihpa).
+
+      " 2. Determine baseline counter from draft table (already-added partners)
+      SELECT SINGLE MAX( partnercounter ) FROM zpm_notifp_d
+        WHERE notificationno = @ls_parent-NotificationNo
+        INTO @DATA(lv_max_draft).
+
+      " 3. Take the higher of the two as baseline
+      DATA(lv_base_ctr) = COND ihpa-counter(
+        WHEN lv_max_ihpa > lv_max_draft
+        THEN lv_max_ihpa
+        ELSE lv_max_draft ).
+
+      " 4. Assign a unique counter to each new partner in %target
+      LOOP AT ls_parent-%target INTO DATA(ls_new_partner).
+
+        lv_base_ctr += 1.
+
+        " Return the key via mapped — this is what the framework uses
+        " to create the entity in the buffer with the CORRECT counter
+        INSERT VALUE #( %cid            = ls_new_partner-%cid
+                        %is_draft       = ls_new_partner-%is_draft
+                        NotificationNo  = ls_parent-NotificationNo
+                        PartnerFunction = 'VU'
+                        PartnerCounter  = lv_base_ctr )
+               INTO TABLE mapped-partner.
+
+      ENDLOOP.
+
+      CLEAR: lv_max_ihpa, lv_max_draft, lv_base_ctr.
 
     ENDLOOP.
 
