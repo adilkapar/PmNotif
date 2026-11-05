@@ -576,6 +576,24 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       ENDIF.
 
       " =========================================================
+      " VALIDATION: Basic/Detail Stoppage Pair Consistency Check
+      " =========================================================
+      SELECT SINGLE @abap_true FROM zi_pm_bm_detailstoppage
+        WHERE Plant          = @ls_param-plant
+          AND BasicCodeGroup = @ls_param-dl_codegrp
+          AND BasicCode      = @ls_param-dl_code
+          AND DetailCode     = @ls_param-d_code
+        INTO @DATA(lv_valid_pair).
+
+      IF lv_valid_pair IS INITIAL.
+        APPEND VALUE #( %cid = key-%cid
+                        %msg = new_message_with_text( severity = if_abap_behv_message=>severity-error
+                                                      text     = 'Selected Detail Stoppage Code is not valid for the selected Basic Stoppage Code. Please re-select Detail Stoppage Code.' )
+                      ) TO reported-notification.
+        CONTINUE.
+      ENDIF.
+
+      " =========================================================
       " VALIDATION: Duplicate Notification Check
       " Same equipment + same date + same basic/detail stoppage codes
       " =========================================================
