@@ -576,10 +576,35 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       ENDIF.
 
       " =========================================================
-      " VALIDATION: Basic/Detail Stoppage Pair Consistency Check
+      " RESOLVE: Equipment's WC Category from Classification
+      " =========================================================
+      DATA lv_wc_category TYPE atwrt.
+
+      SELECT SINGLE charval~atwrt
+        FROM cabn AS charact
+        INNER JOIN ausp AS charval
+          ON  charval~atinn = charact~atinn
+          AND charval~klart = '002'
+          AND charval~adzhl = '0000'
+        WHERE charact~atnam = 'ZPM_EQ_CATEGORY'
+          AND charval~objek = @ls_param-equipment
+        INTO @lv_wc_category.
+
+      IF lv_wc_category IS INITIAL.
+        APPEND VALUE #( %cid = key-%cid
+                        %msg = new_message_with_text(
+                        severity = if_abap_behv_message=>severity-error
+                        text     = 'Equipment does not have a WC Category classification (ZPM_EQ_CATEGORY). Cannot determine valid stoppage codes.' )
+                      ) TO reported-notification.
+        CONTINUE.
+      ENDIF.
+
+      " =========================================================
+      " VALIDATION: Basic/Detail Stoppage Pair + WC Category Check
       " =========================================================
       SELECT SINGLE @abap_true FROM zi_pm_bm_detailstoppage
         WHERE Plant          = @ls_param-plant
+          AND WCCategory     = @lv_wc_category          " NEW: filter by WC Category
           AND BasicCodeGroup = @ls_param-dl_codegrp
           AND BasicCode      = @ls_param-dl_code
           AND DetailCode     = @ls_param-d_code
@@ -587,8 +612,9 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
 
       IF lv_valid_pair IS INITIAL.
         APPEND VALUE #( %cid = key-%cid
-                        %msg = new_message_with_text( severity = if_abap_behv_message=>severity-error
-                                                      text     = 'Selected Detail Stoppage Code is not valid for the selected Basic Stoppage Code. Please re-select Detail Stoppage Code.' )
+                        %msg = new_message_with_text(
+                        severity = if_abap_behv_message=>severity-error
+                        text     = |Selected stoppage codes are not valid for WC Category "{ lv_wc_category }". Please re-select.| )
                       ) TO reported-notification.
         CONTINUE.
       ENDIF.

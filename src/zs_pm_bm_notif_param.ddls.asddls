@@ -15,7 +15,10 @@ define abstract entity ZS_PM_BM_NOTIF_PARAM
   @EndUserText.label: 'Equipment'
   @Consumption.valueHelpDefinition: [{
        entity  : { name: 'ZI_PM_BM_Equipment', element: 'EquipmentNo' },
-       additionalBinding: [{ localElement: 'Plant', element: 'Plant' }],
+       additionalBinding: [
+         { localElement: 'Plant', element: 'Plant' },
+         { localElement: 'WCCategory', element: 'WCCategory' }    // NEW: writes WCCategory back on selection
+       ],
        presentationVariantQualifier: '',
        useForValidation: true
        }]
@@ -28,13 +31,18 @@ define abstract entity ZS_PM_BM_NOTIF_PARAM
   //  }]
   //  WorkCenter   : arbpl;
 
+  @EndUserText.label: 'WC Category'
+  @UI.hidden   : true
+  WCCategory   : atwrt; // Same type as AUSP-ATWRT (CHAR 30)
+
   @EndUserText.label: 'Basic Stoppage Code Group'
   @UI.defaultValue: 'Y1'
-  @UI.hidden: true
+  @UI.hidden   : true
   @Consumption.valueHelpDefinition: [{
     entity     : { name: 'ZI_PM_BM_StoppageReason', element: 'BasicCodeGroup' },
     additionalBinding: [
     { localElement: 'Plant', element: 'Plant' },
+    { localElement: 'WCCategory', element: 'WCCategory', usage: #FILTER },
     { localElement: 'dl_codegrp', element: 'BasicCodeGroup' },
     { localElement: 'd_codegrp',  element: 'DetailCodeGroup' },
     { localElement: 'd_code',     element: 'DetailCode' },
@@ -49,6 +57,7 @@ define abstract entity ZS_PM_BM_NOTIF_PARAM
       entity   : { name: 'ZI_PM_BM_BasicStoppage', element: 'BasicCode' },
       additionalBinding: [
           { localElement: 'Plant', element: 'Plant', usage: #FILTER},
+          { localElement: 'WCCategory', element: 'WCCategory', usage: #FILTER },   // NEW
           { localElement: 'dl_codegrp', element: 'BasicCodeGroup' },
           { localElement: 'dl_code_text',    element: 'BasicStoppageText' }
       ]
@@ -63,7 +72,7 @@ define abstract entity ZS_PM_BM_NOTIF_PARAM
 
   @EndUserText.label: 'Detail Stoppage Code Group'
   @UI.defaultValue: 'Y2'
-  @UI.hidden: true
+  @UI.hidden   : true
   @Consumption.valueHelpDefinition: [{ entity: { name: 'ZI_PM_BM_StoppageReason', element: 'DetailCodeGroup' },
       additionalBinding: [
           { localElement: 'Plant', element: 'Plant', usage: #FILTER},
@@ -80,6 +89,7 @@ define abstract entity ZS_PM_BM_NOTIF_PARAM
       entity   : { name: 'ZI_PM_BM_DetailStoppage', element: 'DetailCode' },
       additionalBinding: [
           { localElement: 'Plant', element: 'Plant', usage: #FILTER},
+          { localElement: 'WCCategory', element: 'WCCategory', usage: #FILTER },   // NEW
           { localElement: 'dl_codegrp', element: 'BasicCodeGroup', usage: #FILTER },
           { localElement: 'dl_code',    element: 'BasicCode', usage: #FILTER },
           { localElement: 'd_codegrp',  element: 'DetailCodeGroup' },
