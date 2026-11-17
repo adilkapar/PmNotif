@@ -1301,22 +1301,48 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
       lv_temp_id = lv_counter.
       lv_orderid = |%{ lv_temp_id }|.
 
-      SELECT NotificationNo, Partner
-        FROM ZR_PM_NotifPartner
-        WHERE NotificationNo = @ls_order_buffer-notif_no
-        INTO TABLE @DATA(lt_notif_partners).
+      " Determine which partner CREATETONOTIF will auto-copy from IHPA.
+      " Rule: find min(ERDAT+ERZEIT); if tied, highest COUNTER among tied rows is copied.
+      DATA(lv_notif_objnr) = |QM{ ls_order_buffer-notif_no ALPHA = IN }|.
+      SELECT parnr, counter, erdat, erzeit
+        FROM ihpa
+        WHERE objnr    = @lv_notif_objnr
+          AND parvw    = 'VU'
+          AND kzloesch IS INITIAL
+        INTO TABLE @DATA(lt_ihpa_partners).
 
-
-      DESCRIBE TABLE lt_notif_partners LINES DATA(lv_lines).
-      LOOP AT lt_notif_partners INTO DATA(ls_partner_rec).
-        IF  sy-tabix EQ 1 .
-          CONTINUE.
+      DATA lv_min_erdat  TYPE erdat.
+      DATA lv_min_erzeit TYPE erzeit.
+      LOOP AT lt_ihpa_partners INTO DATA(ls_ihpa_scan).
+        IF lv_min_erdat IS INITIAL
+           OR ls_ihpa_scan-erdat < lv_min_erdat
+           OR ( ls_ihpa_scan-erdat = lv_min_erdat AND ls_ihpa_scan-erzeit < lv_min_erzeit ).
+          lv_min_erdat  = ls_ihpa_scan-erdat.
+          lv_min_erzeit = ls_ihpa_scan-erzeit.
         ENDIF.
-        " Partner datası (lt_partner: TYPE TABLE OF bapi_alm_order_partn_mul)
+      ENDLOOP.
+
+      DATA lv_auto_parnr TYPE ihpa-parnr.
+      DATA lv_max_ctr    TYPE ihpa-counter.
+      LOOP AT lt_ihpa_partners INTO DATA(ls_ihpa_pick)
+        WHERE erdat = lv_min_erdat AND erzeit = lv_min_erzeit.
+        IF ls_ihpa_pick-counter >= lv_max_ctr.
+          lv_max_ctr     = ls_ihpa_pick-counter.
+          lv_auto_parnr  = ls_ihpa_pick-parnr.
+        ENDIF.
+      ENDLOOP.
+
+      " Pass all partners except the one CREATETONOTIF will auto-copy
+      DATA(lv_extra_partners) = abap_false.
+      LOOP AT lt_ihpa_partners INTO DATA(ls_ihpa_add)
+        WHERE parnr <> lv_auto_parnr.
         APPEND VALUE #( orderid    = lv_orderid
                         partn_role = 'VU'
-                        partner    = ls_partner_rec-Partner ) TO lt_prtner.
+                        partner    = ls_ihpa_add-parnr ) TO lt_prtner.
+        lv_extra_partners = abap_true.
       ENDLOOP.
+
+      CLEAR: lv_min_erdat, lv_min_erzeit, lv_auto_parnr, lv_max_ctr.
 
       " 2. Construct Keys
       DATA(lv_hdr_key) = |{ lv_orderid }{ ls_order_buffer-notif_no }|.
@@ -1325,7 +1351,7 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
       " 3. Append Methods (NO SAVE METHOD HERE!)
       APPEND VALUE #( refnumber = lv_refnum objecttype = 'HEADER'    method = 'CREATETONOTIF' objectkey = lv_hdr_key ) TO lt_methods.
       APPEND VALUE #( refnumber = lv_refnum objecttype = 'OPERATION' method = 'CREATE'        objectkey = lv_opr_key ) TO lt_methods.
-      IF lv_lines NE 1.
+      IF lv_extra_partners = abap_true.
         APPEND VALUE #( refnumber = lv_refnum objecttype = 'PARTNER'   method = 'CREATE'        objectkey = lv_orderid ) TO lt_methods.
       ENDIF.
       APPEND VALUE #( refnumber = lv_refnum objecttype = 'HEADER'    method = 'RELEASE'       objectkey = lv_orderid ) TO lt_methods.
@@ -1383,23 +1409,19 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
 
     IF lv_err_o IS INITIAL AND NOT lt_order_map[] IS INITIAL.
 
-      SELECT NotificationNo, Partner
-        FROM ZR_PM_NotifPartner
-        FOR ALL ENTRIES IN @lhc_zr_pm_notif=>gt_order_create_buffer
-        WHERE NotificationNo = @lhc_zr_pm_notif=>gt_order_create_buffer-notif_no
-        INTO TABLE @lt_notif_partners.
-
-      LOOP AT lt_notif_partners ASSIGNING FIELD-SYMBOL(<fs_np>).
-        SHIFT <fs_np>-NotificationNo LEFT DELETING LEADING '0'.
-      ENDLOOP.
-
       LOOP AT lt_order_map INTO DATA(ls_map).
-        lt_partner = VALUE #( BASE lt_partner
-                              FOR ls_np IN lt_notif_partners
-                              WHERE ( NotificationNo = ls_map-message_v3 )
-                                    ( notif_no       = ls_map-message_v3
-                                      order_no       = ls_map-message_v2
-                                      partner        = ls_np-Partner ) ).
+        DATA(lv_email_notif_no)  = CONV qmnum( ls_map-message_v3 ).
+        DATA(lv_email_notif_obj) = |QM{ lv_email_notif_no ALPHA = IN }|.
+        SELECT parnr FROM ihpa
+          WHERE objnr    = @lv_email_notif_obj
+            AND parvw    = 'VU'
+            AND kzloesch IS INITIAL
+          INTO TABLE @DATA(lt_email_partners).
+        LOOP AT lt_email_partners INTO DATA(ls_email_p).
+          APPEND VALUE #( notif_no = ls_map-message_v3
+                          order_no = ls_map-message_v2
+                          partner  = ls_email_p-parnr ) TO lt_partner.
+        ENDLOOP.
       ENDLOOP.
 
       LOOP AT lt_partner INTO ls_partner.
