@@ -840,6 +840,18 @@ CLASS lhc_ZR_PM_NOTIF IMPLEMENTATION.
       ALL FIELDS WITH CORRESPONDING #( keys )
       RESULT DATA(lt_notifications).
 
+    " Validation: Only one notification may be converted to an order at a time
+    IF lines( keys ) > 1.
+      LOOP AT keys INTO DATA(ls_key_multi).
+        APPEND VALUE #( %tky = ls_key_multi-%tky ) TO failed-notification.
+        APPEND VALUE #( %tky = ls_key_multi-%tky
+                        %msg = new_message_with_text( severity = if_abap_behv_message=>severity-error
+                                                      text     = 'Please select only one notification at a time to create a BM Order.' )
+                      ) TO reported-notification.
+      ENDLOOP.
+      RETURN.
+    ENDIF.
+
     LOOP AT keys INTO DATA(ls_key).
 
       READ TABLE lt_notifications INTO DATA(ls_notif) WITH KEY %tky = ls_key-%tky.
@@ -1291,6 +1303,16 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
 
     DATA: lt_order_map TYPE TABLE OF bapiret2.
 
+    TYPES: BEGIN OF ty_ihpa_row,
+             parnr   TYPE ihpa-parnr,
+             counter TYPE ihpa-counter,
+             erdat   TYPE ihpa-erdat,
+             erzeit  TYPE ihpa-erzeit,
+           END OF ty_ihpa_row.
+    DATA: lv_notif_objnr   TYPE j_objnr,
+          lt_ihpa_partners TYPE TABLE OF ty_ihpa_row,
+          lv_auto_parnr    TYPE ihpa-parnr.
+
     CLEAR: lt_methods, lt_header, lt_operation, lt_return.
 
     LOOP AT lhc_zr_pm_notif=>gt_order_create_buffer INTO DATA(ls_order_buffer).
@@ -1301,48 +1323,32 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
       lv_temp_id = lv_counter.
       lv_orderid = |%{ lv_temp_id }|.
 
+      " Clear all per-iteration work variables
+      CLEAR: lt_ihpa_partners, lv_notif_objnr, lv_auto_parnr.
+
       " Determine which partner CREATETONOTIF will auto-copy from IHPA.
-      " Rule: find min(ERDAT+ERZEIT); if tied, highest COUNTER among tied rows is copied.
-      DATA(lv_notif_objnr) = |QM{ ls_order_buffer-notif_no ALPHA = IN }|.
+      " Rule: sort by ERDAT+ERZEIT ascending, then PARNR ascending — SAP copies the first row.
+      lv_notif_objnr = |QM{ ls_order_buffer-notif_no ALPHA = IN }|.
       SELECT parnr, counter, erdat, erzeit
         FROM ihpa
         WHERE objnr    = @lv_notif_objnr
           AND parvw    = 'VU'
           AND kzloesch IS INITIAL
-        INTO TABLE @DATA(lt_ihpa_partners).
+        INTO TABLE @lt_ihpa_partners.
 
-      DATA lv_min_erdat  TYPE erdat.
-      DATA lv_min_erzeit TYPE erzeit.
-      LOOP AT lt_ihpa_partners INTO DATA(ls_ihpa_scan).
-        IF lv_min_erdat IS INITIAL
-           OR ls_ihpa_scan-erdat < lv_min_erdat
-           OR ( ls_ihpa_scan-erdat = lv_min_erdat AND ls_ihpa_scan-erzeit < lv_min_erzeit ).
-          lv_min_erdat  = ls_ihpa_scan-erdat.
-          lv_min_erzeit = ls_ihpa_scan-erzeit.
-        ENDIF.
-      ENDLOOP.
-
-      DATA lv_auto_parnr TYPE ihpa-parnr.
-      DATA lv_max_ctr    TYPE ihpa-counter.
-      LOOP AT lt_ihpa_partners INTO DATA(ls_ihpa_pick)
-        WHERE erdat = lv_min_erdat AND erzeit = lv_min_erzeit.
-        IF ls_ihpa_pick-counter >= lv_max_ctr.
-          lv_max_ctr     = ls_ihpa_pick-counter.
-          lv_auto_parnr  = ls_ihpa_pick-parnr.
-        ENDIF.
-      ENDLOOP.
+      SORT lt_ihpa_partners BY erdat ASCENDING erzeit ASCENDING parnr ASCENDING.
+      READ TABLE lt_ihpa_partners INTO DATA(ls_ihpa_first) INDEX 1.
+      IF sy-subrc = 0.
+        lv_auto_parnr = ls_ihpa_first-parnr.
+      ENDIF.
 
       " Pass all partners except the one CREATETONOTIF will auto-copy
-      DATA(lv_extra_partners) = abap_false.
       LOOP AT lt_ihpa_partners INTO DATA(ls_ihpa_add)
         WHERE parnr <> lv_auto_parnr.
         APPEND VALUE #( orderid    = lv_orderid
                         partn_role = 'VU'
                         partner    = ls_ihpa_add-parnr ) TO lt_prtner.
-        lv_extra_partners = abap_true.
       ENDLOOP.
-
-      CLEAR: lv_min_erdat, lv_min_erzeit, lv_auto_parnr, lv_max_ctr.
 
       " 2. Construct Keys
       DATA(lv_hdr_key) = |{ lv_orderid }{ ls_order_buffer-notif_no }|.
@@ -1351,8 +1357,12 @@ CLASS lsc_ZR_PM_NOTIF IMPLEMENTATION.
       " 3. Append Methods (NO SAVE METHOD HERE!)
       APPEND VALUE #( refnumber = lv_refnum objecttype = 'HEADER'    method = 'CREATETONOTIF' objectkey = lv_hdr_key ) TO lt_methods.
       APPEND VALUE #( refnumber = lv_refnum objecttype = 'OPERATION' method = 'CREATE'        objectkey = lv_opr_key ) TO lt_methods.
-      IF lv_extra_partners = abap_true.
-        APPEND VALUE #( refnumber = lv_refnum objecttype = 'PARTNER'   method = 'CREATE'        objectkey = lv_orderid ) TO lt_methods.
+      " ONE PARTNER CREATE method row covers ALL rows in it_partner for this order
+      IF line_exists( lt_prtner[ orderid = lv_orderid ] ).
+        APPEND VALUE #( refnumber  = lv_refnum
+                        objecttype = 'PARTNER'
+                        method     = 'CREATE'
+                        objectkey  = lv_orderid ) TO lt_methods.
       ENDIF.
       APPEND VALUE #( refnumber = lv_refnum objecttype = 'HEADER'    method = 'RELEASE'       objectkey = lv_orderid ) TO lt_methods.
 
